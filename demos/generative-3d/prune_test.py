@@ -10,7 +10,7 @@ import sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, isaac_demo/, SIBR_viewers/)
+ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, apg_runtime/, SIBR_viewers/)
 sys.path.insert(0, HERE)
 from edit_demo import Cam, render  # noqa: E402
 from plyfile import PlyData  # noqa: E402

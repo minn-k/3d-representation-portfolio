@@ -1,8 +1,8 @@
-"""생성된 3DGS 에셋을 APG 그래프 + XPBD 로 '잡아당겨' 편집하고, Isaac 없이 3DGS 래스터라이저로 렌더한다.
+"""생성된 3DGS 에셋을 APG 그래프 + XPBD 로 '잡아당겨' 편집하고, 별도 엔진 없이 3DGS 래스터라이저로 렌더한다.
 
   C:\\anaconda\\anaconda3\\envs\\trellis\\python.exe edit_demo.py --name gen_bear --grab-dir 0,1,0.3 [--dist 0.06]
 
-render_cov_pull.py(Isaac 헤드리스) 와 같은 절차: 아래 --pin-h 를 고정, --grab-dir 방향 끝 조각(--grab-r 안)을 잡아
+render_cov_pull.py(기존 오프라인 파이프라인) 와 같은 절차: 아래 --pin-h 를 고정, --grab-dir 방향 끝 조각(--grab-r 안)을 잡아
 그 방향으로 --dist [m] 천천히 끈 뒤 풀어 둔다. 세 가지 렌더:
   rest        당기기 전
   posonly     위치만 갱신 (가우시안 방향·크기는 그대로)
@@ -20,9 +20,9 @@ import numpy as np
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, isaac_demo/, SIBR_viewers/)
-DEMO = os.environ.get("APG_ISAAC_DEMO", os.path.join(ROOT, "isaac_demo"))   # APG-GS 준비 스크립트 · XPBD DLL
-sys.path.insert(0, DEMO)
+ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, apg_runtime/, SIBR_viewers/)
+RUNTIME = os.environ.get("APG_RUNTIME_ROOT", os.path.join(ROOT, "apg_runtime"))   # APG-GS 준비 스크립트 · XPBD DLL
+sys.path.insert(0, RUNTIME)
 from prepare_splat import read_ply  # noqa: E402
 from xpbd import XPBD, load_inputs  # noqa: E402
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer  # noqa: E402
@@ -109,7 +109,7 @@ def label(img, text):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--name", required=True, help="isaac_demo/<name> (예: gen_bear)")
+    ap.add_argument("--name", required=True, help="apg_runtime/<name> (예: gen_bear)")
     ap.add_argument("--grab-dir", default="0,1,0.3", help="이 방향으로 가장 끝에 있는 조각을 잡는다 (월드, z 위)")
     ap.add_argument("--pull", default="", help="당기는 방향 (기본: grab-dir)")
     ap.add_argument("--grab-r", type=float, default=0.03)
@@ -128,7 +128,7 @@ def main():
     args = ap.parse_args()
     vec = lambda t: np.array([float(v) for v in t.split(",")])  # noqa: E731
     W_, H_ = (int(v) for v in args.res.split("x"))
-    d = os.path.join(DEMO, args.name)
+    d = os.path.join(RUNTIME, args.name)
     out = args.out or os.path.join(HERE, "out", args.name.replace("gen_", "", 1))
     os.makedirs(out, exist_ok=True)
 

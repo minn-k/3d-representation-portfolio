@@ -1,9 +1,16 @@
 # Portfolio site
 
-Static page published at https://minn-k.github.io/3d-representation-portfolio/ (branch `gh-pages`, the contents of this folder).
+Static GitHub Pages source published at https://minn-k.github.io/3d-representation-portfolio/ from the `gh-pages` branch.
 
-`make_web.py` rebuilds `index.html` and `assets/` from the local work tree (`APG_ROOT`): every number on the page is read
-from the measurement logs in `genai/out/*/*.json` (mirrored in `demos/generative-3d/results`). Videos are re-encoded to
-H.264 with faststart.
+- `index.html`: page content and media order
+- `style.css`: visual layout
+- `assets/`: public images, videos, and PDF files
+- `make_web.py`: regenerates the page and media from the local measurement logs when the full research work tree is available
 
-Publish: `git subtree split --prefix site -b gh-pages-build && git push origin gh-pages-build:gh-pages --force`.
+After editing `site/` on `main`, publish its contents with:
+
+```powershell
+git subtree split --prefix site -b gh-pages-build
+git push origin gh-pages-build:gh-pages --force
+git branch -D gh-pages-build
+```

@@ -16,7 +16,7 @@ import numpy as np
 from plyfile import PlyData, PlyElement
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, isaac_demo/, SIBR_viewers/)
+ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, apg_runtime/, SIBR_viewers/)
 
 
 def orbit_cameras(n=36, radius=2.0, elev_deg=(15.0, 35.0), size=800, fov_deg=40.0):

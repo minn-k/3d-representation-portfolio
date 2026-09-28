@@ -29,7 +29,7 @@ def main():
 
     pipe = AutoPipelineForText2Image.from_pretrained("stabilityai/sdxl-turbo", torch_dtype=torch.float16,
                                                      variant="fp16")
-    pipe.enable_model_cpu_offload()   # Isaac GUI 가 VRAM 을 쓰고 있을 때도 돌게 (모듈을 쓸 때만 GPU 로)
+    pipe.enable_model_cpu_offload()   # 다른 GPU 작업이 VRAM 을 쓰고 있을 때도 돌게 (모듈을 쓸 때만 GPU 로)
     prompt = args.prompt + STYLE
     log = {"model": "stabilityai/sdxl-turbo", "prompt": prompt, "steps": args.steps, "images": []}
     for seed in range(a, b + 1):

@@ -20,9 +20,9 @@ import time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, isaac_demo/, SIBR_viewers/)
-DEMO = os.environ.get("APG_ISAAC_DEMO", os.path.join(ROOT, "isaac_demo"))   # APG-GS 준비 스크립트 · XPBD DLL
-sys.path.insert(0, DEMO)
+ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, apg_runtime/, SIBR_viewers/)
+RUNTIME = os.environ.get("APG_RUNTIME_ROOT", os.path.join(ROOT, "apg_runtime"))   # APG-GS 준비 스크립트 · XPBD DLL
+sys.path.insert(0, RUNTIME)
 sys.path.insert(0, HERE)
 from prepare_splat import read_ply  # noqa: E402
 from xpbd import XPBD, load_inputs, world_ground  # noqa: E402
@@ -77,15 +77,18 @@ def main():
     os.makedirs(out, exist_ok=True)
 
     # DLL 복사본 (글자마다 독립 전역 상태)
-    src = max([os.path.join(DEMO, "xpbd_dll", n) for n in ("xpbd_isaac.dll", "xpbd_isaac_next.dll")
-               if os.path.exists(os.path.join(DEMO, "xpbd_dll", n))], key=os.path.getmtime)
+    dll_root = os.path.join(RUNTIME, "xpbd_dll")
+    candidates = [os.path.join(dll_root, n) for n in os.listdir(dll_root) if n.lower().endswith(".dll")]
+    if not candidates:
+        raise FileNotFoundError(f"No XPBD DLL found in {dll_root}")
+    src = max(candidates, key=os.path.getmtime)
     dll_dir = os.path.join(HERE, "out", "letters", "dll")
     os.makedirs(dll_dir, exist_ok=True)
 
     L = []
     for k, name in enumerate(LETTERS):
         nm = f"gen_letter_{name}_{VAR}"
-        d = os.path.join(DEMO, nm)
+        d = os.path.join(RUNTIME, nm)
         inp = load_inputs(d, nm)
         _, data = read_ply(os.path.join(d, f"{nm}_crop.ply"))
         col = np.clip(SH_C0 * np.stack([data["f_dc_0"], data["f_dc_1"], data["f_dc_2"]], 1) + 0.5, 0, 1)
