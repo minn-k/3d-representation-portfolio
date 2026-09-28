@@ -333,9 +333,9 @@ def page(rows):
           중심만 옮기면 늘어난 면이 찢어진다. 비용 <b>0.4 ms · 프레임의 약 2%</b>.</p></div>
     </div>
     <div class="row3">
-      {img("cov_pull_rest.jpg", "변형 전 (의자)")}
-      {img("cov_pull_posonly.jpg", "위치만 갱신 — 늘어난 면이 찢어짐")}
-      {img("cov_pull_posshape.jpg", "위치 + Σ′ 갱신 — 면이 이어짐")}
+      {img("chair_rest.jpg", "변형 전 (의자)")}
+      {img("chair_posonly.jpg", "위치만 갱신 — 늘어난 면이 찢어짐")}
+      {img("chair_posshape.jpg", "위치 + Σ′ 갱신 — 면이 이어짐")}
     </div>
   </div>
 </section>
