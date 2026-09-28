@@ -250,14 +250,18 @@ A decoder then turns each voxel into 32 Gaussians, stored in voxel order. `gen3d
 4. Propagates labels on a graph of touching tokens weighted by DiT-feature similarity, with confidently labeled
    visible tokens clamped.
 5. Merges small fragments into their neighbours and sharpens visible voxels to 64³.
+6. Labels hidden voxels by the part volume they bound. The shell is filled into a solid, and each hidden voxel
+   follows the depth field inward to a part core. It takes the part whose visible seeds share that core and are
+   reached through thick interior rather than thin necks.
 
 Gaussian `i` takes the label of voxel `i // 32`; a re-fit asset takes its nearest voxel.
 
 The earlier attention-only version mixed labels on the teddy bear's arm. Attention is feature retrieval, not a
 correspondence, so uniform fur confuses it; every token on a viewing ray voted with the same pixels; and a
-radius-4-token feature graph spread that noise across the arm–body–leg contacts. On a synthetic teddy bear with known
-parts (`tests/test_parts_core.py`), visible-voxel accuracy goes from 0.85 to 0.98, arm accuracy from 0.91 to 0.96,
-and the camera is recovered to 0.7 px.
+radius-4-token feature graph spread that noise across the arm–body–leg contacts. Propagating over the surface alone
+then let the arm take the hidden sides and back of the body, which step 6 addresses. On a synthetic teddy bear with
+known parts (`tests/test_parts_core.py`), visible-voxel accuracy goes from 0.85 to 0.98, hidden-voxel accuracy from
+0.73 to 0.85, and the camera is recovered to 0.7 px.
 
 ## Results
 
