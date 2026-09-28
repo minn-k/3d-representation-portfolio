@@ -108,6 +108,19 @@ def build_media():
                 shutil.copy2(s, os.path.join(A, f"{f}.{ext}"))
     for f in ("cov_pull_rest", "cov_pull_posonly", "cov_pull_posshape"):
         poster(os.path.join(MEDIA, f"{f}.png"), os.path.join(A, f"{f}.jpg"), 720)
+    # 의미 신호 → 부위 → 물리 (gen3d_sem.py · seg2d.py · lift_parts.py · edit_demo.py --parts)
+    for n in ("robot_sem", "bear_sem"):
+        d = os.path.join(GEN, n)
+        if not os.path.exists(os.path.join(d, "parts3d.npz")):
+            continue
+        enc(os.path.join(d, "parts_turntable.mp4"), os.path.join(A, f"{n}_parts.mp4"))
+        first_frame(os.path.join(A, f"{n}_parts.mp4"), os.path.join(A, f"{n}_parts.jpg"))
+        poster(os.path.join(d, "parts2d.png"), os.path.join(A, f"{n}_parts2d.jpg"), 520)
+        poster(os.path.join(d, "parts3d_grid.png"), os.path.join(A, f"{n}_parts3d_grid.jpg"), 1024)
+    bv = os.path.join(GEN, "bear_sem_d100k", "edit_geom_vs_part.mp4")
+    if os.path.exists(bv):
+        enc(bv, os.path.join(A, "bear_geom_vs_part.mp4"))
+        first_frame(os.path.join(A, "bear_geom_vs_part.mp4"), os.path.join(A, "bear_geom_vs_part.jpg"), 3.5)
     return rows
 
 
@@ -193,6 +206,71 @@ def reduce_table(rows):
     return f'<div class="table-wrap"><table class="metrics">{head}{"".join(body)}</table></div>'
 
 
+def sem_section():
+    def st(n, t):
+        p = os.path.join(GEN, n, f"edit_stats_{t}.json")
+        return jl(p) if os.path.exists(p) else None
+    rows = []
+    for title, n in (("곰 인형 · 팔을 몸에서 벌림", "bear_sem_d100k"), ("안내 로봇 · 손을 들어 올림", "robot_sem_d100k")):
+        g, p = st(n, "geom"), st(n, "part") or st(n, "keep0.1")
+        if not g or not p:
+            continue
+        dn = lambda a, b: f"{(b - a) / a * 100:+.0f}%" if a else "–"  # noqa: E731
+        rows.append(f"<tr><td>{E(title)}</td><td>{g['cross_part_edge_ratio'] * 100:.2f}%</td>"
+                    f"<td>{g['disp_cm_near_other_parts']:.3f} → <b>{p['disp_cm_near_other_parts']:.3f}</b> cm "
+                    f"<small>({dn(g['disp_cm_near_other_parts'], p['disp_cm_near_other_parts'])})</small></td>"
+                    f"<td>{g['edges_over_2x'] * 100:.3f} → <b>{p['edges_over_2x'] * 100:.3f}</b>% "
+                    f"<small>({dn(g['edges_over_2x'], p['edges_over_2x'])})</small></td>"
+                    f"<td>{g['disp_cm_grab_part']:.2f} → {p['disp_cm_grab_part']:.2f} cm</td></tr>")
+    table = ("<div class='table-wrap'><table class='metrics'><tr><th>실험</th><th>부위 경계 간선<br><small>기하 그래프 중</small></th>"
+             "<th>맞닿은 다른 부위의 변위<br><small>잡은 부위 2.5 cm 이내 · 낮을수록 좋음</small></th>"
+             "<th>2배 넘게 늘어난 간선<br><small>낮을수록 좋음</small></th><th>잡은 부위 변위<br><small>참고</small></th></tr>"
+             + "".join(rows) + "</table></div>")
+    return f"""
+<section id="semantic">
+  <div class="wrap">
+    <p class="eyebrow">NEW · 탐색 실험</p>
+    <h2>생성 과정의 의미 신호로 가우시안에 부위 이름을 — 그리고 물리에</h2>
+    <p class="sub">원본 3DGS 의 가우시안은 자기가 머리인지 팔인지 모른다 — 색을 맞춘 결과일 뿐이다. 생성 모델은 다르다:
+      TRELLIS 는 3D 복셀을 만들 때 <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>와 <b>부위 구조가 담긴 중간 특징(DiT)</b>을 거친다.
+      이 두 신호를 생성 도중에 꺼내 2D 부위 이름을 3D 가우시안으로 옮기고, 그 부위로 물리 그래프를 다시 짰다.</p>
+    <ol class="pipe">
+      <li><span class="tag gen">2D</span><b>입력 이미지의 부위 이름</b><small>Grounding DINO + SAM</small></li>
+      <li><span class="tag mine">생성 중간</span><b>① attention 투표</b><small>SLat 트랜스포머 블록 4·8·12 · 복셀 → 이미지 패치</small></li>
+      <li><span class="tag mine">생성 중간</span><b>② DiT 특징 전파</b><small>블록 6·12 특징 k-NN 그래프 · 안 보이던 뒷면 채움</small></li>
+      <li><span class="tag mine">내 연구</span><b>가우시안 부위</b><small>가우시안 i → 복셀 i//32 → 토큰</small></li>
+      <li><span class="tag mine">내 연구</span><b>부위 인식 그래프</b><small>경계 간선 90% 제거 · 10% 는 관절로</small></li>
+    </ol>
+    <div class="row2">
+      {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 — 왼쪽 생성 결과 · 오른쪽 가우시안 부위 (뒷면 포함, 입력 사진에 없던 쪽)", True)}
+      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 같은 방법, 털 질감이 균일해 ② 전파가 특히 중요", True)}
+    </div>
+    <h3>어느 신호에 부위 정보가 있나 — 기준선과 비교</h3>
+    <p class="note">행: 원래 색 · ① attention 만 · ① + ② · 기준선(DiT 특징 k-means, 이름 없음) · 기준선(좌표 k-means). 열: 네 방향.
+      좌표 군집은 머리와 몸을 가로질러 자르고, 특징 군집은 외관(무늬)으로 묶인다. 생성 과정의 attention 이 이름을, DiT 특징이 경계를 준다.</p>
+    <div class="row2">
+      {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
+      {img("bear_sem_parts3d_grid.jpg", "곰 인형 — attention 만으로는 몸통에 조각이 섞이고 ② 가 정리한다")}
+    </div>
+    <h3>물리: 부위 경계가 맞닿은 곳에서 끌려오는 정도</h3>
+    <p class="note">같은 하중(잡은 부위를 5~6 cm 당김, 아래 25~40% 고정), 같은 솔버. 기하 그래프 = 공분산 겹침만 · 부위 인식 = 경계 간선의 90% 제거.
+      거리 제약 강성만 낮추는 것으로는 효과가 없었다 — 국소 형상 유지 · 부피 제약의 클러스터가 그래프 연결로 만들어지기 때문에, 연결 자체를 바꿔야 했다.</p>
+    {table}
+    {video("bear_geom_vs_part.mp4", "bear_geom_vs_part.jpg", "곰 팔 벌리기 — 왼쪽 기하 그래프 · 오른쪽 부위 인식 그래프", True)}
+    <div class="callout warn">
+      <b>정직한 결과</b>
+      <ul>
+        <li>효과는 <b>있지만 크지 않다</b> (맞닿은 부위 끌림 약 −11%, 과신장 간선 약 −33%, 곰). 로봇은 팔이 어깨 한 점으로만 붙어 있어 기하 그래프도 원래 누수가 작다.</li>
+        <li>경계 간선을 <b>전부</b> 끊으면 팔이 떨어져 나간다 — 부위 사이에는 '관절' 연결이 필요하고, 지금은 무작위 10% 로 대신했다. 관절 위치를 의미 신호로 정하는 것이 다음 단계.</li>
+        <li>2D 부위 분할은 물체마다 검출 문구를 손으로 골랐다 (곰: 'paw' 가 발에 걸려 '발' 로 바꿈). 안테나처럼 가는 부위는 놓친다.</li>
+        <li>부위 → 재질 → 강체/무름 물성 연결은 아직 안 했다 (다음 단계).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+"""
+
+
 def page(rows):
     gpu = rows[0]["g3"]["gpu"].replace("NVIDIA GeForce ", "") if rows else ""
     return f"""<!doctype html>
@@ -210,7 +288,7 @@ def page(rows):
   <div class="wrap nav-in">
     <a class="brand" href="#top">Sangmin Kwon</a>
     <div class="links">
-      <a href="#genai">생성형 3D 데모</a><a href="#apg">APG-GS</a>
+      <a href="#genai">생성형 3D 데모</a><a href="#semantic">의미 → 물리</a><a href="#apg">APG-GS</a>
       <a href="#background">배경</a><a href="#next">다음 연구</a>
     </div>
   </div>
@@ -312,6 +390,8 @@ def page(rows):
     </div>
   </div>
 </section>
+
+{sem_section()}
 
 <section id="apg">
   <div class="wrap">
