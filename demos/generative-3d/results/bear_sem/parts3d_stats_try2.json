@@ -45,23 +45,6 @@
     "color_corr_visible": 0.4142
   },
   "fallback_to_attn": false,
-  "volumetric": {
-    "solid_voxels": 52359,
-    "shell_voxels": 24842,
-    "core_voxels": 14022,
-    "max_depth_vox": 13.3,
-    "seeds": {
-      "head": 1525,
-      "arm": 734,
-      "body": 649,
-      "leg": 919,
-      "bow tie": 125
-    },
-    "voxels_changed": 4511,
-    "weight": 0.8,
-    "power": 2.0
-  },
-  "voxels_cleaned": 254,
   "visible_voxels": 0.2342806537315836,
   "visible_labeled_voxels": 0.1730536993800821,
   "tokens_with_projection": 0.24743747437474375,
@@ -70,13 +53,6 @@
   "erode_px": 2,
   "graph_radius": 1.8,
   "iters": 120,
-  "voxel_share": {
-    "head": 0.3188149102326705,
-    "arm": 0.20650511230979793,
-    "body": 0.26447145962482893,
-    "leg": 0.18436518798808468,
-    "bow tie": 0.025843329844617985
-  },
   "token_share": {
     "head": 0.3464534645346454,
     "arm": 0.1970069700697007,
@@ -100,13 +76,13 @@
     "leg": 0.2853628536285363,
     "bow tie": 0.01927019270192702
   },
-  "changed_vs_legacy_voxels": 0.22763867643506963,
+  "changed_vs_legacy_voxels": 0.08847918847113759,
   "asset": "gen_bear_sem_d100k",
   "asset_share": {
-    "head": 0.3348633486334863,
-    "arm": 0.1925719257192572,
-    "body": 0.25186251862518627,
-    "leg": 0.18917189171891718,
-    "bow tie": 0.031530315303153034
+    "head": 0.35517355173551735,
+    "arm": 0.18845188451884518,
+    "body": 0.14995149951499515,
+    "leg": 0.27943279432794327,
+    "bow tie": 0.026990269902699027
   }
 }

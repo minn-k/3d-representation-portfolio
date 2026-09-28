@@ -154,7 +154,7 @@ def main():
             ("예전: ① + ② 반경 4 토큰 특징 전파", pc.part_colors(legacy["vox_part"])[g2v])]
     if "vox_proj_label" in res:
         rows += [("투영 투표 (입력 사진에 보이는 복셀만, 회색 = 모름)", pc.part_colors(res["vox_proj_label"])[g2v]),
-                 ("최종: 투영 + 고정 전파 + 조각 정리", pc.part_colors(res["vox_part"])[g2v])]
+                 ("최종: 투영 + 고정 전파 + 부피 기준 가려진 쪽 + 조각 정리", pc.part_colors(res["vox_part"])[g2v])]
     if args.baselines:
         tc = sem["tok_coords"].astype(np.float32)
         rows += [("기준선: DiT 특징 k-means (이름 없음)",

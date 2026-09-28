@@ -119,6 +119,8 @@ def build_media():
         first_frame(os.path.join(A, f"{n}_parts.mp4"), os.path.join(A, f"{n}_parts.jpg"))
         poster(os.path.join(d, "parts2d.png"), os.path.join(A, f"{n}_parts2d.jpg"), 520)
         poster(os.path.join(d, "parts3d_grid.png"), os.path.join(A, f"{n}_parts3d_grid.jpg"), 1024)
+        if os.path.exists(os.path.join(d, "camera_fit.png")):                 # lift_parts.py --mode proj
+            poster(os.path.join(d, "camera_fit.png"), os.path.join(A, f"{n}_camera_fit.jpg"), 1400)
     sv = os.path.join(GEN, "semantic_shake", "robot_b.mp4")
     if os.path.exists(sv):                                            # 핵심 영상: 흔들기 (semantic_shake.py)
         enc(sv, os.path.join(A, "robot_shake.mp4"))
@@ -154,7 +156,6 @@ def pct(x):
 def asset_cards(rows):
     out = []
     for r in rows:
-        g3, ed, gr = r["g3"], r["ed"], r["graph"]
         out.append(f"""
       <article class="asset" id="gen-{r['name']}">
         <header><h4>{E(r['title'])}</h4><code class="prompt">“{E(r['prompt'])}”</code></header>
@@ -164,8 +165,6 @@ def asset_cards(rows):
           {video(f"gen_{r['name']}_edit.mp4", f"gen_{r['name']}_edit.jpg",
                  "③ 10만 개로 재최적화 → 잡아당겨 변형 (Σ′ = FΣ₀Fᵀ 적용)", True)}
         </div>
-        <p class="asset-note">{E(r['edit'])} · 생성 가우시안 {fmt(g3['gaussians'])}개 → 재최적화 {fmt(ed['gaussians'])}개 → 그래프 간선 {fmt(ed['edges'])}개
-          (가장 큰 연결 성분 {gr['largest_pct']:.1f}%) · 2배 넘게 늘어난 간선 {pct(ed['edges_over_2x'])}</p>
       </article>""")
     return "\n".join(out)
 
@@ -222,19 +221,19 @@ def sem_section():
     <p class="eyebrow">NEW · 생성 과정의 의미 정보 → 가우시안 부위 → 물리 편집</p>
     <h2>가우시안마다 '어느 부위인지' 를 — 생성 모델 안에서 꺼내서</h2>
     <p class="sub">원본 3DGS 의 가우시안은 자기가 머리인지 팔인지 모른다 — 색을 맞춘 결과일 뿐이다. TRELLIS 는 3D 복셀을 만들 때
-      <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>와 <b>부위 구조가 담긴 중간 특징(DiT)</b>을 거친다. 이 신호를 생성 도중에 꺼내
-      입력 이미지의 부위 이름을 3D 로 옮겼다. 결과: <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (PLY 속성으로 내보냄 ·
+      <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>와 <b>부위 구조가 담긴 중간 특징(DiT)</b>을 거친다. 이 신호를 생성 도중에 꺼내고
+      입력 사진의 카메라를 추정해, 사진에 보이는 곳은 사진의 부위 이름을, 가려진 곳은 부피를 따라 3D 로 옮겼다. 결과: <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (PLY 속성으로 내보냄 ·
       로봇 10만 개 = 머리 {counts['head']:,} · 팔 {counts['arm']:,} · 몸통 {counts['torso']:,} · 다리 {counts['leg']:,}).</p>
     <ol class="pipe">
       <li><span class="tag gen">2D</span><b>입력 이미지의 부위 이름</b><small>Grounding DINO + SAM</small></li>
-      <li><span class="tag mine">생성 중간</span><b>① attention 투표</b><small>SLat 트랜스포머 블록 4·8·12 · 복셀 → 이미지 패치</small></li>
-      <li><span class="tag mine">생성 중간</span><b>② DiT 특징 전파</b><small>블록 6·12 특징 k-NN 그래프 · 안 보이던 뒷면 채움</small></li>
-      <li><span class="tag mine">결과</span><b>가우시안 part_id</b><small>가우시안 i → 복셀 i//32 → 토큰</small></li>
-      <li><span class="tag mine">내 연구</span><b>부위별 물성</b><small>강체 부위 + 연체 부위 · XPBD</small></li>
+      <li><span class="tag mine">생성 중간</span><b>attention 투표</b><small>SLat 트랜스포머 블록 4·8·12 · 토큰 → 이미지 패치</small></li>
+      <li><span class="tag mine">카메라</span><b>보이는 복셀만 2D 투영</b><small>attention + 실루엣으로 입력 시점 추정 · z-buffer</small></li>
+      <li><span class="tag mine">가려진 쪽</span><b>부피 기준 + DiT 특징</b><small>어느 부위의 속에 붙어 있나 · 특징 전파</small></li>
+      <li><span class="tag mine">결과</span><b>part_id → 부위별 물성</b><small>가우시안 i → 복셀 i//32 · 강체 + 연체 XPBD</small></li>
     </ol>
     <div class="row2">
       {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (뒷면 포함, 입력 사진에 없던 쪽)", True)}
-      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 털 질감이 균일해 attention 만으로는 얼룩지고 ② 전파가 정리한다", True)}
+      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 사진에 보이는 쪽은 2D 부위를 그대로, 가려진 옆 · 뒤는 부피 기준으로 (아래 시행착오의 3차)", True)}
     </div>
 
     <h3>그래서 무엇이 달라지나 — 부위마다 다른 물성</h3>
@@ -254,15 +253,46 @@ def sem_section():
     <h3>어느 신호에 부위 정보가 있나 — 기준선과 비교</h3>
     <p class="note">행: 원래 색 · ① attention 만 · ① + ② · 기준선(DiT 특징 k-means, 이름 없음) · 기준선(좌표 k-means). 열: 네 방향.
       좌표 군집은 머리와 몸을 가로질러 자르고, 특징 군집은 외관(무늬)으로 묶인다. 이름은 attention 이, 경계는 DiT 특징이 준다.</p>
-    <div class="row2">
+    <div class="narrow">
       {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
-      {img("bear_sem_parts3d_grid.jpg", "곰 인형")}
     </div>
+
+    <h3>시행착오 — 곰 인형 팔이 섞이던 문제를 세 번에 걸쳐 고치기</h3>
+    <p class="sub">털 질감이 고른 곰 인형에서 한쪽 팔에 다른 부위가 섞였다. 원인을 하나씩 찾아 고쳤다 —
+      각 줄은 같은 곰의 part_id 를 정면 · 옆 · 뒤 · 반대 옆에서 본 것.</p>
+    <figure class="media"><img src="assets/bear_parts_try1.jpg" alt="1차 — attention 투표 + DiT 특징 전파" loading="lazy">
+      <figcaption><b>1차 · attention 투표 + DiT 특징 전파</b> — 오른팔 안쪽에 머리 라벨이 띠처럼 섞이고 다리에 머리 점이 생겼다.
+        cross-attention 은 대응점이 아니라 특징 검색이라 고른 털에서는 머리 · 다리 패치까지 본다. 같은 시선 위의 가려진 복셀도
+        앞 픽셀로 투표했고, 전파 반경(토큰 4칸 = 물체 크기의 1/8)이 팔과 몸통 사이 틈을 건너 잡음을 퍼뜨렸다.</figcaption></figure>
+    <figure class="media"><img src="assets/bear_parts_try2.jpg" alt="2차 — 입력 카메라 추정 + 보이는 복셀만 투영" loading="lazy">
+      <figcaption><b>2차 · 입력 카메라 추정 + 보이는 복셀만 2D 부위 투영</b> — attention 무게중심으로 카메라를 맞추고 실루엣으로 다듬은 뒤
+        (실루엣 일치 0.30 → 0.89), 사진에 실제로 보이는 복셀만 그 픽셀의 부위를 받게 했다. 앞면은 깨끗해졌지만 가려진 옆 · 뒤는
+        표면을 따라 번지는 전파로 채워서, 라벨이 넓게 잡힌 팔이 몸통 옆과 허벅지까지 먹고 꼬리는 다리가 됐다
+        (사진에서 몸통은 배에만 라벨이 있었다).</figcaption></figure>
+    <figure class="media"><img src="assets/bear_parts_try3.jpg" alt="3차 — 가려진 쪽은 부피 기준" loading="lazy">
+      <figcaption><b>3차 · 가려진 쪽은 '어느 부위의 속(부피)에 붙어 있나' 로</b> — 복셀 껍질을 속이 찬 부피로 채우고, 표면마다 깊이를 따라
+        닿는 부위의 속과 부피 안 거리(두꺼운 속은 싸고, 팔 · 몸통이 맞닿은 얇은 목은 비싸게)로 정했다. 등과 꼬리는 배와 같은
+        몸통 속에 닿으므로 몸통으로 돌아왔다. 뒷머리 · 목 뒤에는 팔 라벨이 아직 조금 섞인다.</figcaption></figure>
+    <figure class="media"><img src="assets/bear_sem_camera_fit.jpg" alt="2차에서 추가한 입력 카메라 추정" loading="lazy">
+      <figcaption>2차에서 추가한 입력 카메라 추정 — 왼쪽 2D 부위 (Grounding DINO + SAM) · 가운데 추정 카메라로 그린 보이는 복셀의 3D 부위 ·
+        오른쪽 실루엣 비교 (회색 = 일치 · 빨강 = 복셀만 · 파랑 = 사진만)</figcaption></figure>
+    <div class="table-wrap"><table class="metrics">
+      <tr><th rowspan="2">부위 정확도<br><small>정답을 아는 합성 곰 · 복셀 단위</small></th><th colspan="2">복셀</th><th colspan="2">부위</th></tr>
+      <tr><th>사진에 보이는</th><th>가려진</th><th>팔</th><th>몸통</th></tr>
+      <tr><td>1차 · attention + 특징 전파</td><td>0.85</td><td>0.73</td><td>0.91</td><td>0.00</td></tr>
+      <tr><td>2차 · + 카메라 추정 · 가시성 투영</td><td><b>0.98</b></td><td>0.77</td><td>0.96</td><td>0.25</td></tr>
+      <tr><td>3차 · + 부피 기준 가려진 쪽</td><td><b>0.98</b></td><td><b>0.85</b></td><td><b>0.98</b></td><td><b>0.48</b></td></tr>
+    </table></div>
+    <p class="note">합성 곰 = 구 · 타원체 · 캡슐로 만든 곰 모양에 부위 정답을 두고, 알려진 카메라로 2D 부위와 잡음 섞인 attention 을 만든 시험
+      (저장소 tests/test_parts_core.py). 실제 곰에는 정답이 없어 그림으로 확인했다 — 몸통으로 분류된 가우시안 11.6% → 15.0% → 25.2%.
+      몸통이 아직 가장 약한 것은 사진에서 몸통 라벨이 배에만 있기 때문으로, 합성 곰에서 옆구리까지 라벨이 있으면 0.48 → 0.82 로 오른다
+      — 다음 단계는 2D 부위 문구 보강.</p>
+    <div class="narrow"><figure class="media"><img src="assets/bear_sem_parts3d_grid.jpg" alt="곰 인형 부위 비교" loading="lazy"><figcaption>곰 인형 — 행: 원래 색 · attention 투표만 · 1차 결과 · 2차의 투영 투표 (사진에 보이는 복셀만, 회색 = 모름) · 3차 최종. 열: 네 방향.</figcaption></figure></div>
 
     <div class="callout warn">
       <b>정직한 결과와 다음 단계</b>
       <ul>
-        <li>부위 라벨은 잘 나온다 (앞 · 뒷면). 다만 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
+        <li>사진에 보이는 쪽은 2D 부위를 그대로 따르지만 가려진 쪽은 부피로 추정한 것이라, 곰 뒷머리처럼 조금 섞인다. 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
         <li>'단단한 부위' 는 지금 강체로 처리했다 — 솔버의 형상 유지가 물체 전체 하나의 강체 맞춤뿐이라, 연체 안에서 부위마다 다른 강성
           (예: 몸통은 조금만 출렁)은 아직 표현하지 못한다. <b>부위 단위 강체 맞춤을 솔버에 넣는 것</b>, 부위 → 재질 → 물성 자동 연결이 다음 단계.</li>
       </ul>
