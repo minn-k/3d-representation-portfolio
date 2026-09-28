@@ -1,0 +1,35 @@
+{
+  "name": "robot_sem",
+  "image": "C:\\gaussian-splatting\\genai\\out\\robot\\text2img_s3.png",
+  "seed": 1,
+  "gaussians": 655936,
+  "voxels": 20498,
+  "tokens": 4051,
+  "generate_s": 14.1,
+  "recorded_steps": [
+    8,
+    20
+  ],
+  "attn_blocks": [
+    4,
+    8,
+    12,
+    16,
+    20,
+    23
+  ],
+  "feat_blocks": [
+    6,
+    12,
+    18,
+    23
+  ],
+  "attn_calls": {
+    "4": 13,
+    "8": 13,
+    "12": 13,
+    "16": 13,
+    "20": 13,
+    "23": 13
+  }
+}

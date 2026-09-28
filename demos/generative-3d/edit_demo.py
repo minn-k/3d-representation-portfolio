@@ -25,6 +25,7 @@ RUNTIME = os.environ.get("APG_RUNTIME_ROOT", os.path.join(ROOT, "apg_runtime")) 
 sys.path.insert(0, RUNTIME)
 from prepare_splat import read_ply  # noqa: E402
 from xpbd import XPBD, load_inputs  # noqa: E402
+from scipy.spatial import cKDTree  # noqa: E402
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer  # noqa: E402
 
 SH_C0 = 0.28209479177387814
@@ -124,6 +125,17 @@ def main():
     ap.add_argument("--focus", type=float, default=0.0, help="카메라가 바라보는 점을 물체 중심에서 잡은 곳 쪽으로 이 비율만큼")
     ap.add_argument("--res", default="720x720")
     ap.add_argument("--out", default="")
+    ap.add_argument("--parts", default="", help="lift_parts.py 의 parts3d.npz — 부위 인식 그래프")
+    ap.add_argument("--cross-scale", type=float, default=1.0, help="부위 경계를 넘는 간선 강성 배율 (1 = 기하 그래프 그대로)")
+    ap.add_argument("--grab-part", default="", help="이 부위(parts3d 이름) 안에서만 잡을 곳을 찾는다")
+    ap.add_argument("--near-r", type=float, default=0.025, help="누수 지표: 잡은 부위에서 이 거리[m] 안의 다른 부위")
+    ap.add_argument("--cross-keep", type=float, default=1.0,
+                    help="부위 경계를 넘는 간선 중 남길 비율 (1 = 기하 그래프 그대로). 형상·부피 클러스터도 이 연결로 만들어진다")
+    ap.add_argument("--conf", type=float, default=0.5, help="이 신뢰도 이상인 가우시안끼리만 경계 판정")
+    ap.add_argument("--dist-compliance", type=float, default=0.0,
+                    help="거리 제약 compliance. 0 이면 완전 강체라 간선 강성(--cross-scale)이 효과가 없다 (α̃ = compliance/강성/dt²)")
+    ap.add_argument("--tag", default="", help="출력 파일 이름 꼬리표")
+    ap.add_argument("--single", default="", help="이 글자를 붙인 Σ′ 렌더만 영상으로 (비교 영상 이어 붙이기용)")
     ap.add_argument("--views", action="store_true", help="당기지 않고 네 방향(+x +y -x -y) rest 만 찍는다 (잡을 곳 고르기)")
     args = ap.parse_args()
     vec = lambda t: np.array([float(v) for v in t.split(",")])  # noqa: E731
@@ -133,6 +145,20 @@ def main():
     os.makedirs(out, exist_ok=True)
 
     inp = load_inputs(d, args.name)
+    part_st = {}
+    if args.parts:
+        pz = np.load(args.parts)
+        pa, pc = pz["asset_part"].astype(int), pz["asset_conf"]
+        pnames = [str(n) for n in pz["names"]]
+        e0, e1 = inp["edges"][:, 0], inp["edges"][:, 1]
+        cross = (pa[e0] != pa[e1]) & (pc[e0] > args.conf) & (pc[e1] > args.conf)
+        inp["stiff"] = np.ascontiguousarray((inp["stiff"] * np.where(cross, args.cross_scale, 1.0)).astype(np.float32))
+        keep = ~cross | (np.random.default_rng(0).random(len(cross)) < args.cross_keep)   # 경계 간선 솎기 (관절만 남김)
+        for k_ in ("edges", "rest", "stiff"):
+            inp[k_] = np.ascontiguousarray(inp[k_][keep])
+        part_st = {"cross_part_edge_ratio": float(cross.mean()), "cross_scale": args.cross_scale, "conf": args.conf,
+                   "cross_keep": args.cross_keep, "edges_after": int(keep.sum())}
+        print(f"[edit] parts {pnames}: cross-part edges {cross.mean():.2%} -> stiffness x{args.cross_scale}", flush=True)
     _, data = read_ply(os.path.join(d, f"{args.name}_crop.ply"))
     color = np.clip(SH_C0 * np.stack([data["f_dc_0"], data["f_dc_1"], data["f_dc_2"]], 1) + 0.5, 0, 1)
     xf = json.load(open(os.path.join(d, f"{args.name}_transform.json"), encoding="utf-8"))
@@ -149,9 +175,12 @@ def main():
     g_dir = vec(args.grab_dir)
     g_dir /= np.linalg.norm(g_dir)
     proj = (Wr - c) @ g_dir
-    g0 = Wr[np.argmax(proj)]
+    cand = np.ones(len(Wr), bool)
+    if args.grab_part:
+        cand = pa == pnames.index(args.grab_part)
+        proj = np.where(cand, proj, -np.inf)
     g0 = Wr[np.argsort(-proj)[:200]].mean(0)                       # 끝 200개 평균 = 잡는 점
-    grab = np.where(np.linalg.norm(Wr - g0, axis=1) < args.grab_r)[0].astype(np.int32)
+    grab = np.where((np.linalg.norm(Wr - g0, axis=1) < args.grab_r) & cand)[0].astype(np.int32)
     z = Wr[:, 2]
     pinm = z < z.min() + args.pin_h * np.ptp(z)
     if args.pin_far > 0:
@@ -187,7 +216,7 @@ def main():
 
     sim = XPBD()
     sim.create(inp)
-    sim.set_solver(iters=20, dt=1 / 60, under_relax=0.6, vel_damping=0.1)
+    sim.set_solver(iters=20, dt=1 / 60, under_relax=0.6, vel_damping=0.1, dist_compliance=args.dist_compliance)
     sim.set_constraints(distance=True, shape=True, angle=False, volume=True)
     sim.set_volume(compliance=1e-6, ring_k=3, max_members=2048, leader_min_hop=2)
     sim.set_object_shape(0.0)
@@ -219,7 +248,8 @@ def main():
             a = render(cam, Pw, q_rest_w, sc_rest_w, op, color)
             qw = mat_to_quat(Rm[None] @ quat_to_mat(q.astype(np.float64)))
             b = render(cam, Pw, qw, sc * s, op, color)
-            frames.append(np.concatenate([label(a, "위치만 갱신"), label(b, "위치 + Σ' = FΣ₀Fᵀ")], axis=1))
+            frames.append(label(b, args.single) if args.single else
+                          np.concatenate([label(a, "위치만 갱신"), label(b, "위치 + Σ' = FΣ₀Fᵀ")], axis=1))
     n_shape_calls = len(frames)
     P = sim.positions()
     sc, q, kk = sim.shapes(1e-2)
@@ -229,21 +259,36 @@ def main():
     img_pos = render(cam, Pw, q_rest_w, sc_rest_w, op, color)
     qw = mat_to_quat(Rm[None] @ quat_to_mat(q.astype(np.float64)))
     img_shape = render(cam, Pw, qw, sc * s, op, color)
-    Image.fromarray(img_pos).save(os.path.join(out, "edit_posonly.png"))
-    Image.fromarray(img_shape).save(os.path.join(out, "edit_posshape.png"))
+    Image.fromarray(img_pos).save(os.path.join(out, f"edit_posonly{args.tag}.png"))
+    Image.fromarray(img_shape).save(os.path.join(out, f"edit_posshape{args.tag}.png"))
+    if args.parts:                                   # 부위별 변위 [cm] — 잡지 않은 부위가 얼마나 끌려왔나 (누수)
+        disp = np.linalg.norm(P.astype(np.float64) - P0, axis=1) * s * 100
+        free = np.ones(len(P), bool)
+        free[pin] = False
+        free[grab] = False
+        part_st["disp_cm_by_part"] = {n: round(float(disp[(pa == k) & free].mean()), 3) for k, n in enumerate(pnames)
+                                      if np.any((pa == k) & free)}
+        gp_ = int(np.bincount(pa[grab]).argmax())
+        part_st["grab_part"] = pnames[gp_]
+        gpos = Wr[pa == gp_]
+        dn, _ = cKDTree(gpos).query(Wr)
+        near = (pa != gp_) & (dn < args.near_r) & free
+        part_st["near_other_parts"] = int(near.sum())
+        part_st["disp_cm_near_other_parts"] = round(float(disp[near].mean()), 4) if near.any() else 0.0
+        part_st["disp_cm_grab_part"] = round(float(disp[(pa == gp_) & free].mean()), 4)
     diff = float(np.abs(img_pos.astype(np.float32) - img_shape.astype(np.float32)).mean())
     sim.destroy()
 
     import imageio
-    imageio.mimsave(os.path.join(out, "edit_compare.mp4"), frames + [frames[-1]] * 30, fps=30, quality=8,
+    imageio.mimsave(os.path.join(out, f"edit_compare{args.tag}.mp4"), frames + [frames[-1]] * 30, fps=30, quality=8,
                     macro_block_size=8)
     st = {"name": args.name, "gaussians": int(len(Wr)), "edges": int(len(e)), "pinned": int(len(pin)),
           "grabbed": int(len(grab)), "pull_cm": args.dist * 100, "steps": total,
           "xpbd_ms_per_step": round(1000 * t_sim / total, 2),
           "shape_update_ms": round(1000 * t_shape / n_shape_calls, 2),
           "deformed_gaussians": int(kk), "edges_over_1p5x": float(np.mean(r_ > 1.5)),
-          "edges_over_2x": float(np.mean(r_ > 2)), "mean_abs_pixel_diff_pos_vs_shape": round(diff, 2)}
-    json.dump(st, open(os.path.join(out, "edit_stats.json"), "w"), indent=2)
+          "edges_over_2x": float(np.mean(r_ > 2)), "mean_abs_pixel_diff_pos_vs_shape": round(diff, 2), "dist_compliance": args.dist_compliance, **part_st}
+    json.dump(st, open(os.path.join(out, f"edit_stats{args.tag}.json"), "w"), indent=2)
     print("[edit]", json.dumps(st), flush=True)
 
 

@@ -1,0 +1,12 @@
+{
+  "name": "robot_sem",
+  "full": 580210,
+  "keep": 100000,
+  "iters": 3000,
+  "seconds": 13.6,
+  "psnr_prune_only": 27.2,
+  "psnr_distilled": 49.13,
+  "psnr_obj_prune_only": 21.42,
+  "psnr_obj_distilled": 43.36,
+  "res": 512
+}

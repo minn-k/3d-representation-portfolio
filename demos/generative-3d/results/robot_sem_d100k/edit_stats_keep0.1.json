@@ -1,0 +1,29 @@
+{
+  "name": "gen_robot_sem_d100k",
+  "gaussians": 99573,
+  "edges": 953309,
+  "pinned": 28667,
+  "grabbed": 815,
+  "pull_cm": 6.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 20.62,
+  "shape_update_ms": 1.11,
+  "deformed_gaussians": 9145,
+  "edges_over_1p5x": 0.00040595441771765504,
+  "edges_over_2x": 1.7832623000517146e-05,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.21,
+  "dist_compliance": 0.0001,
+  "cross_part_edge_ratio": 0.011363966725225619,
+  "cross_scale": 1.0,
+  "conf": 0.3,
+  "cross_keep": 0.1,
+  "edges_after": 953309,
+  "disp_cm_by_part": {
+    "head": 0.021,
+    "antenna": 0.017,
+    "arm": 1.372,
+    "torso": 0.073,
+    "leg": 0.098
+  },
+  "grab_part": "arm"
+}

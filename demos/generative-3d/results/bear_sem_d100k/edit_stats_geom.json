@@ -1,0 +1,32 @@
+{
+  "name": "gen_bear_sem_d100k",
+  "gaussians": 99999,
+  "edges": 959078,
+  "pinned": 38842,
+  "grabbed": 699,
+  "pull_cm": 5.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 20.03,
+  "shape_update_ms": 1.24,
+  "deformed_gaussians": 19597,
+  "edges_over_1p5x": 0.0070244547367367405,
+  "edges_over_2x": 0.002867337171742027,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.25,
+  "dist_compliance": 0.0001,
+  "cross_part_edge_ratio": 0.028186445732255355,
+  "cross_scale": 1.0,
+  "conf": 0.3,
+  "cross_keep": 1.0,
+  "edges_after": 959078,
+  "disp_cm_by_part": {
+    "head": 0.38,
+    "arm": 0.994,
+    "body": 0.303,
+    "leg": 0.375,
+    "bow tie": 0.384
+  },
+  "grab_part": "arm",
+  "near_other_parts": 8718,
+  "disp_cm_near_other_parts": 0.9303,
+  "disp_cm_grab_part": 0.994
+}
