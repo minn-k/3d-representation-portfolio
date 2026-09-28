@@ -119,10 +119,10 @@ def build_media():
         first_frame(os.path.join(A, f"{n}_parts.mp4"), os.path.join(A, f"{n}_parts.jpg"))
         poster(os.path.join(d, "parts2d.png"), os.path.join(A, f"{n}_parts2d.jpg"), 520)
         poster(os.path.join(d, "parts3d_grid.png"), os.path.join(A, f"{n}_parts3d_grid.jpg"), 1024)
-    pv = os.path.join(GEN, "semantic_pose", "robot_sem_d100k.mp4")
-    if os.path.exists(pv):                                            # 핵심 영상: 부위 단위 편집 (semantic_pose.py)
-        enc(pv, os.path.join(A, "robot_pose_edit.mp4"))
-        first_frame(os.path.join(A, "robot_pose_edit.mp4"), os.path.join(A, "robot_pose_edit.jpg"), 3.0)
+    sv = os.path.join(GEN, "semantic_shake", "robot_b.mp4")
+    if os.path.exists(sv):                                            # 핵심 영상: 흔들기 (semantic_shake.py)
+        enc(sv, os.path.join(A, "robot_shake.mp4"))
+        first_frame(os.path.join(A, "robot_shake.mp4"), os.path.join(A, "robot_shake.jpg"), 1.0)
     bv = os.path.join(GEN, "bear_sem_d100k", "edit_geom_vs_part.mp4")
     if os.path.exists(bv):
         enc(bv, os.path.join(A, "bear_geom_vs_part.mp4"))
@@ -216,8 +216,8 @@ def sem_section():
     def st(n, t):
         p = os.path.join(GEN, n, f"edit_stats_{t}.json")
         return jl(p) if os.path.exists(p) else None
-    pose = jl(os.path.join(GEN, "semantic_pose", "robot_sem_d100k.json"))
-    pg, ps = pose["geometry"], pose["semantic"]
+    sh = jl(os.path.join(GEN, "semantic_shake", "robot_b.json"))
+    wu, ws = sh["wobble_rms_cm"]["uniform"], sh["wobble_rms_cm"]["semantic"]
     g, p = st("bear_sem_d100k", "geom"), st("bear_sem_d100k", "part")
     counts = {n: int(v) for n, v in zip(["head", "antenna", "arm", "torso", "leg"],
                                          np.bincount(np.load(os.path.join(GEN, "robot_sem", "parts3d.npz"))["asset_part"]))}
@@ -236,28 +236,26 @@ def sem_section():
       <li><span class="tag mine">생성 중간</span><b>① attention 투표</b><small>SLat 트랜스포머 블록 4·8·12 · 복셀 → 이미지 패치</small></li>
       <li><span class="tag mine">생성 중간</span><b>② DiT 특징 전파</b><small>블록 6·12 특징 k-NN 그래프 · 안 보이던 뒷면 채움</small></li>
       <li><span class="tag mine">결과</span><b>가우시안 part_id</b><small>가우시안 i → 복셀 i//32 → 토큰</small></li>
-      <li><span class="tag mine">내 연구</span><b>부위 단위 물리 편집</b><small>부위 선택 · 관절 자동 · XPBD</small></li>
+      <li><span class="tag mine">내 연구</span><b>부위별 물성</b><small>강체 부위 + 연체 부위 · XPBD</small></li>
     </ol>
     <div class="row2">
       {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (뒷면 포함, 입력 사진에 없던 쪽)", True)}
       {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 털 질감이 균일해 attention 만으로는 얼룩지고 ② 전파가 정리한다", True)}
     </div>
 
-    <h3>그래서 무엇이 달라지나 — '오른팔을 들어라'</h3>
-    <p class="sub">기하 그래프만 있으면 '팔' 이라는 단위가 없다. 할 수 있는 것은 손끝 근처를 잡아 끄는 것뿐이고, 팔 모양은 그래프가 알아서 따라온다.
-      part_id 가 있으면 <b>'오른팔' 을 이름으로 통째로 고르고</b>, 팔과 몸통이 맞닿은 가우시안에서 <b>어깨 관절을 자동으로 찾아</b> 그 둘레로 돌린다.
-      몸통 · 머리는 두 경우 모두 같은 XPBD 물리로 따라온다. 같은 목표 (손끝 경로 동일, 60°).</p>
-    {video("robot_pose_edit.mp4", "robot_pose_edit.jpg", "왼쪽 기하 그래프만 (손끝을 잡아 끎) · 오른쪽 의미 부위 ('오른팔' 을 어깨 관절 둘레로)", True)}
+    <h3>그래서 무엇이 달라지나 — 부위마다 다른 물성</h3>
+    <p class="sub">기하 그래프에는 '부위' 가 없으니 물성도 온몸에 하나뿐이다 — 흔들면 머리 · 몸통 · 팔이 한 덩어리 젤리처럼 같이 출렁인다.
+      part_id 가 있으면 부위마다 물성을 줄 수 있다: 몸통 · 머리 · 다리는 강체로, <b>양팔만 무른 XPBD 연체</b>로.
+      같은 받침을 같은 폭(±{sh['amp'] * 100:.0f} cm · {sh['freq']:.0f} Hz · {sh['shake_s']:.1f} s)으로 흔든 뒤 멈춘다.</p>
+    {video("robot_shake.mp4", "robot_shake.jpg", "왼쪽 기존 그래프 · 온몸 같은 연체 · 오른쪽 의미 부위 · 몸체 강체 + 양팔만 연체", True)}
     <div class="table-wrap"><table class="metrics">
-      <tr><th></th><th>팔 모양 오차<br><small>강체 맞춤 후 RMS · 팔이 휘거나 늘어난 정도</small></th>
-        <th>팔이 돈 각도<br><small>목표 60°</small></th><th>몸통 변위<br><small>끌려온 정도</small></th><th>머리 변위</th></tr>
-      <tr><td>기하 그래프만</td><td>{pg['arm_shape_error_cm']:.2f} cm</td><td>{pg['arm_rotation_deg_achieved']:.0f}°</td>
-        <td>{pg['disp_cm']['torso']:.2f} cm</td><td>{pg['disp_cm']['head']:.2f} cm</td></tr>
-      <tr><td>의미 부위</td><td><b>{ps['arm_shape_error_cm']:.2f} cm</b></td><td>{ps['arm_rotation_deg_achieved']:.0f}°</td>
-        <td>{ps['disp_cm']['torso']:.2f} cm</td><td>{ps['disp_cm']['head']:.2f} cm</td></tr>
+      <tr><th>흔들림 (받침 이동을 뺀 변위 RMS)</th><th>머리</th><th>몸통</th><th>팔</th></tr>
+      <tr><td>기존 그래프 · 온몸 같은 연체</td><td>{wu['head']:.2f} cm</td><td>{wu['torso']:.2f} cm</td><td>{wu['arm']:.2f} cm</td></tr>
+      <tr><td>의미 부위 · 몸체 강체 + 양팔 연체</td><td><b>{ws['head']:.2f} cm</b></td><td><b>{ws['torso']:.2f} cm</b></td><td><b>{ws['arm']:.2f} cm</b></td></tr>
     </table></div>
-    <p class="note">의미 부위 쪽은 팔이 곧은 채로 관절 둘레로 돈다 (모양 오차 0 — 팔 전체를 부착했기 때문). 대신 어깨를 통해 몸통이 더 끌려온다 —
-      기하 쪽은 팔이 휘면서 그 힘을 흡수한다. 차이는 '누가 더 좋은가' 가 아니라 <b>편집의 단위가 가우시안 덩어리에서 부위로 바뀐다</b>는 것이다.</p>
+    <p class="note">물성 — 기존 그래프: 온몸 간선 강성 {sh['uniform_stiff']} · 물체 형상 유지 {sh['uniform_shape']} (다리만 받침에 고정).
+      의미 부위: part_id 가 팔이 아닌 가우시안(몸통 · 머리 · 다리)은 강체로 받침과 함께 움직이고, 팔 가우시안만 간선 강성 {sh['soft_stiff']} ·
+      형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계.</p>
 
     <h3>어느 신호에 부위 정보가 있나 — 기준선과 비교</h3>
     <p class="note">행: 원래 색 · ① attention 만 · ① + ② · 기준선(DiT 특징 k-means, 이름 없음) · 기준선(좌표 k-means). 열: 네 방향.
@@ -279,8 +277,8 @@ def sem_section():
       <ul>
         <li>부위 라벨은 잘 나온다 (앞 · 뒷면). 다만 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
         <li>경계 간선 솎기의 물리 효과는 작다 (곰 −11% / −33%, 로봇은 거의 0). 강성만 낮추는 것은 효과가 없었다 — 형상 유지 · 부피 클러스터가 그래프 연결로 만들어지기 때문.</li>
-        <li>부위마다 다른 재질(몸 단단 · 팔 무름)도 시험했지만, 지금 솔버의 형상 유지가 물체 전체 하나의 강체 맞춤이라 부위별 강성이 제대로 표현되지 않았다 —
-          <b>부위 단위 강체 맞춤을 솔버에 넣는 것</b>, 관절 위치를 의미 신호로 정하는 것, 부위 → 재질 → 물성 연결이 다음 단계.</li>
+        <li>'단단한 부위' 는 지금 강체로 처리했다 — 솔버의 형상 유지가 물체 전체 하나의 강체 맞춤뿐이라, 연체 안에서 부위마다 다른 강성
+          (예: 몸통은 조금만 출렁)은 아직 표현하지 못한다. <b>부위 단위 강체 맞춤을 솔버에 넣는 것</b>, 부위 → 재질 → 물성 자동 연결이 다음 단계.</li>
       </ul>
     </div>
   </div>
