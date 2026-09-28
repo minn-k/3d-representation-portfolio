@@ -1,23 +1,22 @@
-"""흔들기 시험 — 왼쪽: 기존 그래프 · 온몸 같은 물성 / 오른쪽: 의미 부위로 물성 배정 (양팔만 무름, 몸통 · 머리 · 다리 단단).
+"""흔들기 시험 — 왼쪽: 기존 그래프 · 온몸 같은 물성 / 오른쪽: 의미 부위로 물성 배정 (팔은 더 말랑, 몸체는 덜 말랑).
 
   C:\\anaconda\\anaconda3\\envs\\trellis\\python.exe semantic_shake.py --tag robot_dangle
 
-발(아래 --pin-h)을 받침에 고정하고 받침을 좌우로 --shake-s 동안 흔든 뒤 멈춘다. 같은 그래프 · 같은 솔버.
+발(아래 --pin-h)을 받침에 고정하고 받침을 좌우로 --shake-s 동안 흔든 뒤 멈춘다. 같은 그래프 · 같은 솔버 · 같은 모양.
 물성 = 거리 간선의 강성 (α̃ = compliance / 강성 / dt² — 전역 compliance 가 0 이면 강성이 무효라 켠다)
-     + 물체 단위 형상 유지.
-의미 쪽은 팔꿈치에서 손끝까지만 무르고 나머지는 받침과 함께 강체로 움직인다. 모양은 그대로 두고 물성만 바꾼다.
-팔은 part_id 로 고르고, 팔꿈치는 그 팔의 모양에서 찾는다 (--elbow, find_arms). 무른 정도 w 는 팔꿈치 앞뒤
-(--elbow-blend) 에서 0 → 1 로 매끄럽게 올라가고, 간선 강성은 1 → --soft-stiff 로 이어진다 (w = 0 인 위팔 · 어깨만 강체에
-붙인다). 강체와 무른 부분이 한 줄에서 딱 끊기면 그 경계만 늘어나 잘린 것처럼 보인다.
+     + 형상 유지 (물체 단위 강체 맞춤으로 되돌리는 세기, set_particle_weights 로 가우시안마다).
+의미 쪽도 발만 고정한 한 덩어리 연체이고, 물성만 부위마다 다르다: part_id 가 팔인 가우시안은 --soft-stiff ·
+--soft-shape (더 말랑), 나머지는 --body-stiff · --body-shape (기존 그래프 쪽보다 덜 말랑). 부위 경계에서는 물성이
+그래프 이웃을 따라 --blend-hops 번 섞여 몇 가우시안에 걸쳐 이어진다. 경계를 강체에 붙이거나 한 줄에서 물성을 끊으면
+그 줄만 늘어나 잘린 것처럼 보인다.
+--elbow auto 를 주면 팔 안에서도 팔꿈치 너머만 말랑하게 한다 (find_arms). --rigid-body 1 은 예전 방식
+(팔이 아닌 부분을 받침에 강체로 붙임).
 중력은 쓰지 않는다: 이 솔버에서 중력은 무른 팔을 기둥처럼 늘인다.
 부위는 lift_parts.py 가 생성 과정의 신호로 가우시안마다 붙인 part_id.
 지표: 부위별 흔들림 = 받침 이동을 뺀, 쉬는 자세에서 벗어난 거리의 시간 RMS (cm). 출력 out/semantic_shake/<tag>.mp4 · .json
 
-기본값이 그 영상이다. 무른 부분이 시작하는 곳은 로그의 "elbow at …" 줄로 확인하고, 어긋나면 --elbow 에
-어깨 0 → 손끝 1 사이 비율을 준다 (클수록 손 쪽부터 무르다).
-덜렁임을 키우려면 --semantic-shape 를 낮춘다 (0.04 정도까지).
-페이지의 예전 영상(robot_b, 팔 전체가 무름)은
-  semantic_shake.py --tag robot_b --elbow 0 --semantic-shape 0.08 --shake-s 1.6 --seconds 4
+팔을 더 출렁이게 하려면 --soft-shape 를 낮추고 (0.03), 몸체를 더 단단하게 하려면 --body-stiff · --body-shape 를 올린다.
+경계가 보이면 --blend-hops 를 올린다 (10). 흔드는 힘은 --amp (폭, 힘에 비례).
 """
 import argparse
 import json
@@ -120,6 +119,18 @@ def find_arms(Wr, arm, body, edges, elbow="auto", blend=0.25, touch_r=0.012, bin
     return arms
 
 
+def graph_blend(w, edges, hops):
+    """간선 이웃 평균을 hops 번 — 부위 경계에서 물성이 몇 가우시안에 걸쳐 이어지게 (경계에서 먼 곳은 그대로)."""
+    N = len(w)
+    i, j = edges[:, 0].astype(np.int64), edges[:, 1].astype(np.int64)
+    A = coo_matrix((np.ones(2 * len(i)), (np.r_[i, j], np.r_[j, i])), shape=(N, N)).tocsr()
+    deg = np.maximum(np.asarray(A.sum(1)).ravel(), 1)
+    w = w.astype(np.float64)
+    for _ in range(hops):
+        w = 0.5 * w + 0.5 * (A @ w) / deg
+    return w
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--asset", default="gen_robot_sem_d100k")
@@ -127,16 +138,20 @@ def main():
     ap.add_argument("--soft", default="arm", help="무르게 할 부위")
     ap.add_argument("--conf", type=float, default=0.3)
     ap.add_argument("--compliance", type=float, default=5e-5, help="거리 제약 전역 compliance")
-    ap.add_argument("--soft-stiff", type=float, default=0.2, help="의미 쪽 무른 부위(팔) 간선 강성 배율")
+    ap.add_argument("--soft-stiff", type=float, default=0.2, help="의미 쪽 팔 간선 강성 배율 (기존 그래프 쪽보다 무름)")
+    ap.add_argument("--soft-shape", type=float, default=0.05, help="의미 쪽 팔 형상 유지 (낮을수록 더 출렁)")
+    ap.add_argument("--soft-fit", type=float, default=0.3, help="팔의 강체 맞춤 가중 (작을수록 팔이 몸 기준 자세를 덜 흔든다)")
+    ap.add_argument("--body-stiff", type=float, default=0.6, help="의미 쪽 몸체 간선 강성 배율 (기존 그래프 쪽보다 단단)")
+    ap.add_argument("--body-shape", type=float, default=0.15, help="의미 쪽 몸체 형상 유지")
+    ap.add_argument("--blend-hops", type=int, default=6, help="부위 경계에서 물성을 그래프 이웃으로 섞는 횟수")
     ap.add_argument("--uniform-stiff", type=float, default=0.3, help="기존 그래프 쪽 온몸 간선 강성 배율 (찢어지지 않을 만큼 무름)")
     ap.add_argument("--uniform-shape", type=float, default=0.1, help="기존 그래프 쪽 물체 형상 유지 (온몸이 한 덩어리 젤리로)")
-    ap.add_argument("--semantic-shape", type=float, default=0.06,
-                    help="의미 쪽 물체 형상 유지 (팔이 늘어뜨린 자세로 스프링처럼 돌아온다, 낮을수록 더 덜렁)")
-    ap.add_argument("--rigid-body", type=int, default=1, help="의미 쪽: 단단한 부위를 강체로 (받침과 함께 움직임), 무른 부위만 XPBD")
-    ap.add_argument("--elbow", default="auto",
-                    help="무른 쪽이 시작하는 곳: auto (팔이 가장 꺾인 곳) 또는 어깨→손끝 (팔을 따라 잰) 거리의 비율 (0 = 팔 전체)")
+    ap.add_argument("--semantic-shape", type=float, default=0.08, help="--rigid-body 1 일 때 의미 쪽 물체 형상 유지")
+    ap.add_argument("--rigid-body", type=int, default=0, help="1 = 예전 방식: 팔이 아닌 부분을 받침에 강체로 붙이고 팔만 XPBD")
+    ap.add_argument("--elbow", default="none",
+                    help="none = 팔 클래스 전체가 말랑 / auto (팔이 가장 꺾인 곳부터) / 어깨→손끝 (팔을 따라 잰) 거리의 비율")
     ap.add_argument("--elbow-blend", type=float, default=0.25,
-                    help="팔꿈치 앞뒤로 강체 → 무름이 이어지는 폭 (어깨→손끝 길이의 비율)")
+                    help="--elbow 를 줄 때 팔꿈치 앞뒤로 물성이 이어지는 폭 (어깨→손끝 길이의 비율)")
     ap.add_argument("--body", default="torso", help="어깨를 찾을 이웃 부위")
     ap.add_argument("--pin-h", type=float, default=0.33, help="받침에 붙이는 높이 (다리)")
     ap.add_argument("--amp", type=float, default=0.04, help="흔들기 폭 [m]")
@@ -144,7 +159,7 @@ def main():
     ap.add_argument("--shake-s", type=float, default=2.4)
     ap.add_argument("--seconds", type=float, default=5.0)
     ap.add_argument("--damping", type=float, default=0.002)
-    ap.add_argument("--titles", default="기존 그래프 · 온몸 같은 연체,의미 부위 · 팔꿈치 아래만 말랑 + 나머지 단단")
+    ap.add_argument("--titles", default="기존 그래프 · 온몸 같은 연체,의미 부위 · 팔은 더 말랑 + 몸체는 덜 말랑")
     ap.add_argument("--gap", type=float, default=0.42)
     ap.add_argument("--res", default="1600x800")
     ap.add_argument("--eye", default="0,-1.1,0.34")
@@ -181,20 +196,25 @@ def main():
     body = ~arm
     if args.body in names:
         body &= (pa == names.index(args.body)) & (pc > args.conf)
-    # 무른 정도: 팔꿈치 앞뒤에서 0 → 1 (위팔 · 어깨 0, 아래팔 · 손 1). 몸체는 0
-    arms = find_arms(Wr, arm, body, e, "auto" if args.elbow == "auto" else float(args.elbow), args.elbow_blend)
-    wsoft = np.zeros(len(Wr))
-    for a in arms:
-        wsoft[a["idx"]] = a["w"]
-    soft = wsoft >= 0.5                                               # 지표용 '무른 팔' = 팔꿈치 너머
+    # 말랑한 정도 w: 팔 1, 몸체 0 (--elbow 를 주면 팔꿈치 앞뒤에서 0 → 1)
+    arms = []
+    if args.elbow == "none":
+        wraw = arm.astype(np.float64)
+    else:
+        arms = find_arms(Wr, arm, body, e, "auto" if args.elbow == "auto" else float(args.elbow), args.elbow_blend)
+        wraw = np.zeros(len(Wr))
+        for a in arms:
+            wraw[a["idx"]] = a["w"]
+    soft = wraw >= 0.5                                                # 지표용 '팔'
+    wsoft = wraw if args.rigid_body else graph_blend(wraw, e, args.blend_hops)
     z = Wr[:, 2]
     pin = np.where(z < z.min() + args.pin_h * np.ptp(z))[0].astype(np.int32)
-    body_rigid = np.where(wsoft <= 0)[0].astype(np.int32)              # 의미 쪽 강체 = 조금이라도 무른 가우시안을 뺀 전부
-    print(f"[shake] {args.soft} {arm.sum():,} / {len(Wr):,} Gaussians in {len(keep_lab)} pieces | free {int((wsoft > 0).sum()):,}, "
-          f"soft beyond the elbow {int(soft.sum()):,} | pinned {len(pin):,}", flush=True)
+    body_rigid = np.where(wraw <= 0)[0].astype(np.int32)               # --rigid-body 1: 팔이 아닌 전부를 받침에
+    print(f"[shake] {args.soft} {arm.sum():,} / {len(Wr):,} Gaussians in {len(keep_lab)} pieces | soft {int(soft.sum()):,}, "
+          f"blended {int(((wsoft > 0.02) & (wsoft < 0.98)).sum()):,} | pinned {len(pin):,}", flush=True)
     for a in arms:
         print(f"[shake] arm {a['side']}: {len(a['idx']):,} Gaussians, elbow at {a['elbow_frac']:.0%} of shoulder->fingertip "
-              f"(bend {a['bend_deg']} deg), free {int((a['w'] > 0).sum()):,}, soft {int((a['w'] >= 0.5).sum()):,}", flush=True)
+              f"(bend {a['bend_deg']} deg), soft {int((a['w'] >= 0.5).sum()):,}", flush=True)
 
     src = max([os.path.join(RUNTIME, "xpbd_dll", n) for n in ("xpbd_isaac.dll", "xpbd_isaac_next.dll")
                if os.path.exists(os.path.join(RUNTIME, "xpbd_dll", n))], key=os.path.getmtime)
@@ -204,8 +224,10 @@ def main():
         if mode == "uniform":
             inp["stiff"] = np.ascontiguousarray((inp["stiff"] * args.uniform_stiff).astype(np.float32))
         else:
-            we = 0.5 * (wsoft[e[:, 0]] + wsoft[e[:, 1]])              # 강성 1 → soft_stiff 로 이어진다
-            inp["stiff"] = np.ascontiguousarray((inp["stiff"] * args.soft_stiff ** we).astype(np.float32))
+            we = 0.5 * (wsoft[e[:, 0]] + wsoft[e[:, 1]])              # 몸체 강성 → 팔 강성 으로 이어진다
+            k_body = 1.0 if args.rigid_body else args.body_stiff
+            inp["stiff"] = np.ascontiguousarray((inp["stiff"] * k_body ** (1 - we) * args.soft_stiff ** we)
+                                                .astype(np.float32))
         dll = os.path.join(out, f"xpbd_{k}.dll")
         if not os.path.exists(dll) or os.path.getmtime(dll) < os.path.getmtime(src):
             shutil.copy2(src, dll)
@@ -214,11 +236,23 @@ def main():
         sim.set_solver(iters=16, dt=1 / 60, under_relax=0.6, vel_damping=args.damping, dist_compliance=args.compliance)
         sim.set_constraints(distance=True, shape=False, angle=False, volume=True)
         sim.set_volume(compliance=1e-6, ring_k=3, max_members=2048, leader_min_hop=2)
-        sim.set_object_shape(args.uniform_shape if mode == "uniform" else args.semantic_shape)
+        sim.set_object_shape(args.uniform_shape if mode == "uniform" else
+                             args.semantic_shape if args.rigid_body else args.body_shape)
         sim.set_object_shape_gpu(True)
         sim.set_ground(False, (0, 0, 1), 0.0, gravity=0.0)
         sim.step()
         sim.reset()
+        if mode == "semantic" and not args.rigid_body:
+            if hasattr(sim, "set_particle_weights"):             # 형상 유지도 몸체 → 팔로 이어지게 (6 단계)
+                lev = np.round(wsoft * 5) / 5
+                for j, v in enumerate(np.unique(lev)):
+                    ids_v = np.where(lev == v)[0].astype(np.int32)
+                    sim.set_particle_weights(ids_v, inv_mass_scale=1.0, fit_weight=1.0 + (args.soft_fit - 1.0) * v,
+                                             shape_stiffness=args.body_shape + (args.soft_shape - args.body_shape) * v,
+                                             append=j > 0)
+            else:
+                print("[shake] WARNING this runtime has no set_particle_weights: shape retention is --body-shape "
+                      "everywhere, only edge stiffness differs", flush=True)
         sims.append(sim)
 
     P0 = inp0["pos"].astype(np.float64)
@@ -268,14 +302,14 @@ def main():
     imageio.imwrite(os.path.join(out, f"{args.tag}_mid.png"), frames[int(len(frames) * 0.35)])
     rms = {m: {n: round(float(np.sqrt(np.mean(np.square(v)))), 3) for n, v in c.items() if v} for m, c in wob.items()}
     peak = {m: {n: round(float(np.max(v)), 3) for n, v in c.items() if v} for m, c in wob.items()}
-    st = {k_: getattr(args, k_) for k_ in ("asset", "elbow", "compliance", "soft_stiff", "uniform_stiff", "uniform_shape",
+    st = {k_: getattr(args, k_) for k_ in ("asset", "elbow", "compliance", "soft_stiff", "soft_shape", "soft_fit",
+                                            "body_stiff", "body_shape", "blend_hops", "uniform_stiff", "uniform_shape",
                                             "semantic_shape", "rigid_body", "elbow_blend", "pin_h", "amp",
                                             "freq", "shake_s", "seconds", "damping")}
-    arms_st = [{"side": a["side"], "gaussians": int(len(a["idx"])), "free_gaussians": int((a["w"] > 0).sum()),
-                "soft_gaussians": int((a["w"] >= 0.5).sum()), "elbow_frac": a["elbow_frac"], "bend_deg": a["bend_deg"],
+    arms_st = [{"side": a["side"], "gaussians": int(len(a["idx"])), "soft_gaussians": int((a["w"] >= 0.5).sum()), "elbow_frac": a["elbow_frac"], "bend_deg": a["bend_deg"],
                 "shoulder_world": np.round(a["shoulder"], 4).tolist(), "elbow_world": np.round(a["elbow"], 4).tolist()}
                for a in arms]
-    st.update({"soft": f"{args.soft} beyond the elbow", "arm_gaussians": int(arm.sum()), "soft_gaussians": int(soft.sum()),
+    st.update({"soft": args.soft if args.elbow == "none" else f"{args.soft} beyond the elbow", "arm_gaussians": int(arm.sum()), "soft_gaussians": int(soft.sum()),
                "arms": arms_st, "wobble_rms_cm": rms, "wobble_peak_cm": peak})
     json.dump(st, open(os.path.join(out, f"{args.tag}.json"), "w"), indent=2, ensure_ascii=False)
     print("[shake]", json.dumps({"rms": rms}, ensure_ascii=False), flush=True)
