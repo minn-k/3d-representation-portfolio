@@ -1,0 +1,48 @@
+{
+  "model": "stabilityai/sdxl-turbo (img2img)",
+  "prompt": "isometric 3D render of the capital letter S built from a wooden garden trellis lattice, brown wood slats, green climbing ivy vines and leaves hanging, small grass tuft at the base, single object, centered, plain white background, soft studio lighting, high detail",
+  "strength": 0.6,
+  "steps": 5,
+  "images": [
+    {
+      "seed": 0,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s0.png",
+      "seconds": 4.4
+    },
+    {
+      "seed": 1,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s1.png",
+      "seconds": 2.24
+    },
+    {
+      "seed": 2,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s2.png",
+      "seconds": 2.14
+    },
+    {
+      "seed": 3,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s3.png",
+      "seconds": 2.09
+    },
+    {
+      "seed": 4,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s4.png",
+      "seconds": 2.13
+    },
+    {
+      "seed": 5,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s5.png",
+      "seconds": 2.11
+    },
+    {
+      "seed": 6,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s6.png",
+      "seconds": 2.12
+    },
+    {
+      "seed": 7,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_S\\i2i_s7.png",
+      "seconds": 2.1
+    }
+  ]
+}

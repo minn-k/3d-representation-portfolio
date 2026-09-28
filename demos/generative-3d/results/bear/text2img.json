@@ -1,0 +1,27 @@
+{
+  "model": "stabilityai/sdxl-turbo",
+  "prompt": "a cute plush teddy bear toy sitting, single object, full body, centered, 3/4 view, plain white background, soft studio lighting, high detail",
+  "steps": 2,
+  "images": [
+    {
+      "seed": 0,
+      "path": "C:\\gaussian-splatting\\genai\\out\\bear\\text2img_s0.png",
+      "seconds": 1.29
+    },
+    {
+      "seed": 1,
+      "path": "C:\\gaussian-splatting\\genai\\out\\bear\\text2img_s1.png",
+      "seconds": 0.49
+    },
+    {
+      "seed": 2,
+      "path": "C:\\gaussian-splatting\\genai\\out\\bear\\text2img_s2.png",
+      "seconds": 4.68
+    },
+    {
+      "seed": 3,
+      "path": "C:\\gaussian-splatting\\genai\\out\\bear\\text2img_s3.png",
+      "seconds": 3.8
+    }
+  ]
+}

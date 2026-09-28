@@ -1,0 +1,7 @@
+{
+  "source": "out/plant/gaussian.ply",
+  "total": 470048,
+  "kept": 150000,
+  "min_opacity": 0.02,
+  "keep": 150000
+}

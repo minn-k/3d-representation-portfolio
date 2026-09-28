@@ -1,0 +1,12 @@
+{
+  "name": "robot",
+  "image": "C:\\gaussian-splatting\\genai\\out\\robot\\text2img_s3.png",
+  "seed": 1,
+  "gaussians": 655936,
+  "load_s": 19.2,
+  "generate_s": 19.3,
+  "peak_vram_gb": 5.82,
+  "ss_steps": 25,
+  "slat_steps": 25,
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER"
+}

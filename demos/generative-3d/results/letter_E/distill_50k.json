@@ -1,0 +1,12 @@
+{
+  "name": "letter_E",
+  "full": 317154,
+  "keep": 50000,
+  "iters": 3000,
+  "seconds": 10.1,
+  "psnr_prune_only": 24.47,
+  "psnr_distilled": 43.49,
+  "psnr_obj_prune_only": 20.04,
+  "psnr_obj_distilled": 39.07,
+  "res": 512
+}

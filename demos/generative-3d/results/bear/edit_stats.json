@@ -1,0 +1,15 @@
+{
+  "name": "gen_bear",
+  "gaussians": 791253,
+  "edges": 7849067,
+  "pinned": 515973,
+  "grabbed": 7470,
+  "pull_cm": 6.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 97.0,
+  "shape_update_ms": 4.88,
+  "deformed_gaussians": 147133,
+  "edges_over_1p5x": 0.0010054698220820384,
+  "edges_over_2x": 3.0067267867633184e-05,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.08
+}

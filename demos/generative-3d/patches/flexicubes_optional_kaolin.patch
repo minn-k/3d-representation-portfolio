@@ -1,0 +1,17 @@
+diff --git a/flexicubes.py b/flexicubes.py
+index 93e47b6..45db9cd 100644
+--- a/flexicubes.py
++++ b/flexicubes.py
+@@ -14,7 +14,11 @@
+ # limitations under the License.
+ import torch
+ from .tables import *
+-from kaolin.utils.testing import check_tensor
++try:
++    from kaolin.utils.testing import check_tensor
++except ImportError:  # Windows: kaolin 없음 — Gaussian 출력만 쓰므로 검사 생략
++    def check_tensor(*args, **kwargs):
++        return True
+ 
+ __all__ = [
+     'FlexiCubes'

@@ -1,0 +1,103 @@
+diff --git a/trellis/pipelines/trellis_text_to_3d.py b/trellis/pipelines/trellis_text_to_3d.py
+index f64ada4..240f524 100644
+--- a/trellis/pipelines/trellis_text_to_3d.py
++++ b/trellis/pipelines/trellis_text_to_3d.py
+@@ -3,7 +3,10 @@ import torch
+ import torch.nn as nn
+ import numpy as np
+ from transformers import CLIPTextModel, AutoTokenizer
+-import open3d as o3d
++try:
++    import open3d as o3d
++except ImportError:  # 텍스트 파이프라인의 선택 기능에서만 쓴다
++    o3d = None
+ from .base import Pipeline
+ from . import samplers
+ from ..modules import sparse as sp
+@@ -226,7 +229,7 @@ class TrellisTextTo3DPipeline(Pipeline):
+         slat = self.sample_slat(cond, coords, slat_sampler_params)
+         return self.decode_slat(slat, formats)
+     
+-    def voxelize(self, mesh: o3d.geometry.TriangleMesh) -> torch.Tensor:
++    def voxelize(self, mesh: "o3d.geometry.TriangleMesh") -> torch.Tensor:
+         """
+         Voxelize a mesh.
+ 
+@@ -249,7 +252,7 @@ class TrellisTextTo3DPipeline(Pipeline):
+     @torch.no_grad()
+     def run_variant(
+         self,
+-        mesh: o3d.geometry.TriangleMesh,
++        mesh: "o3d.geometry.TriangleMesh",
+         prompt: str,
+         num_samples: int = 1,
+         seed: int = 42,
+diff --git a/trellis/renderers/gaussian_render.py b/trellis/renderers/gaussian_render.py
+index 57108e3..4795a72 100755
+--- a/trellis/renderers/gaussian_render.py
++++ b/trellis/renderers/gaussian_render.py
+@@ -70,13 +70,11 @@ def render(viewpoint_camera, pc : Gaussian, pipe, bg_color : torch.Tensor, scali
+     kernel_size = pipe.kernel_size
+     subpixel_offset = torch.zeros((int(viewpoint_camera.image_height), int(viewpoint_camera.image_width), 2), dtype=torch.float32, device="cuda")
+ 
+-    raster_settings = GaussianRasterizationSettings(
++    common = dict(
+         image_height=int(viewpoint_camera.image_height),
+         image_width=int(viewpoint_camera.image_width),
+         tanfovx=tanfovx,
+         tanfovy=tanfovy,
+-        kernel_size=kernel_size,
+-        subpixel_offset=subpixel_offset,
+         bg=bg_color,
+         scale_modifier=scaling_modifier,
+         viewmatrix=viewpoint_camera.world_view_transform,
+@@ -86,7 +84,11 @@ def render(viewpoint_camera, pc : Gaussian, pipe, bg_color : torch.Tensor, scali
+         prefiltered=False,
+         debug=pipe.debug
+     )
+-    
++    if 'kernel_size' in GaussianRasterizationSettings._fields:
++        raster_settings = GaussianRasterizationSettings(kernel_size=kernel_size, subpixel_offset=subpixel_offset, **common)
++    else:  # graphdeco 원본 래스터라이저 (antialiasing 필드) — 로컬 env 에 설치된 것
++        raster_settings = GaussianRasterizationSettings(antialiasing=False, **common)
++
+     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
+ 
+     means3D = pc.get_xyz
+@@ -121,7 +123,7 @@ def render(viewpoint_camera, pc : Gaussian, pipe, bg_color : torch.Tensor, scali
+         colors_precomp = override_color
+ 
+     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
+-    rendered_image, radii = rasterizer(
++    raster_out = rasterizer(
+         means3D = means3D,
+         means2D = means2D,
+         shs = shs,
+@@ -131,6 +133,7 @@ def render(viewpoint_camera, pc : Gaussian, pipe, bg_color : torch.Tensor, scali
+         rotations = rotations,
+         cov3D_precomp = cov3D_precomp
+     )
++    rendered_image, radii = raster_out[0], raster_out[1]
+ 
+     # Those Gaussians that were frustum culled or had a radius of 0 were not visible.
+     # They will be excluded from value updates used in the splitting criteria.
+diff --git a/trellis/renderers/mesh_renderer.py b/trellis/renderers/mesh_renderer.py
+index b504fa4..228d277 100644
+--- a/trellis/renderers/mesh_renderer.py
++++ b/trellis/renderers/mesh_renderer.py
+@@ -1,5 +1,8 @@
+ import torch
+-import nvdiffrast.torch as dr
++try:
++    import nvdiffrast.torch as dr
++except ImportError:  # 메시 렌더에서만 쓴다 (Gaussian 출력만 쓰는 이 데모에는 불필요)
++    dr = None
+ from easydict import EasyDict as edict
+ from ..representations.mesh import MeshExtractResult
+ import torch.nn.functional as F
+diff --git a/trellis/representations/mesh/flexicubes b/trellis/representations/mesh/flexicubes
+--- a/trellis/representations/mesh/flexicubes
++++ b/trellis/representations/mesh/flexicubes
+@@ -1 +1 @@
+-Subproject commit 815e075a2a400d06c48d94c347674344ed6ae5c5
++Subproject commit 815e075a2a400d06c48d94c347674344ed6ae5c5-dirty

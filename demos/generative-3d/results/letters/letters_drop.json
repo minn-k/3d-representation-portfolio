@@ -1,0 +1,43 @@
+{
+  "letters": [
+    "T",
+    "R",
+    "E",
+    "L",
+    "L2",
+    "I",
+    "S"
+  ],
+  "variant": "d50k",
+  "gaussians_per_letter": [
+    49998,
+    49974,
+    50000,
+    50000,
+    50000,
+    49999,
+    50000
+  ],
+  "drop_m": 0.6,
+  "gap_s": 0.33,
+  "gravity": 9.81,
+  "object_shape": 0.6,
+  "restitution": 0.5,
+  "friction": 0.6,
+  "iters": 16,
+  "damping": 0.01,
+  "physics_hz": 60,
+  "fps": 30,
+  "frames": 390,
+  "physics_s": 32.0,
+  "render_s": 55.4,
+  "yaw_deg": [
+    0.2,
+    0.6,
+    1.2,
+    358.8,
+    357.4,
+    4.5,
+    0.0
+  ]
+}

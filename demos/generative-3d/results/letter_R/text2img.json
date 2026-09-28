@@ -1,0 +1,28 @@
+{
+  "model": "stabilityai/sdxl-turbo (img2img)",
+  "prompt": "isometric 3D render of the capital letter R built from a wooden garden trellis lattice, brown wood slats, green climbing ivy vines and leaves hanging, small grass tuft at the base, single object, centered, plain white background, soft studio lighting, high detail",
+  "strength": 0.85,
+  "steps": 4,
+  "images": [
+    {
+      "seed": 0,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_R\\i2i_s0.png",
+      "seconds": 4.43
+    },
+    {
+      "seed": 1,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_R\\i2i_s1.png",
+      "seconds": 2.28
+    },
+    {
+      "seed": 2,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_R\\i2i_s2.png",
+      "seconds": 2.17
+    },
+    {
+      "seed": 3,
+      "path": "C:\\gaussian-splatting\\genai\\out\\letter_R\\i2i_s3.png",
+      "seconds": 2.17
+    }
+  ]
+}

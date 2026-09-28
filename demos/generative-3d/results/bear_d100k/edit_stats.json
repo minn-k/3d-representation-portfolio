@@ -1,0 +1,15 @@
+{
+  "name": "gen_bear_d100k",
+  "gaussians": 99999,
+  "edges": 958701,
+  "pinned": 64097,
+  "grabbed": 1413,
+  "pull_cm": 6.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 18.21,
+  "shape_update_ms": 1.1,
+  "deformed_gaussians": 33655,
+  "edges_over_1p5x": 0.00037863734365563403,
+  "edges_over_2x": 0.0,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.18
+}

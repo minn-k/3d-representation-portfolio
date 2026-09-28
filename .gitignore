@@ -9,6 +9,7 @@ venv/
 data/
 artifacts/
 outputs/
+out/
 cache/
 *.ply
 *.npz

@@ -1,0 +1,15 @@
+{
+  "name": "gen_robot",
+  "gaussians": 542121,
+  "edges": 5353534,
+  "pinned": 468111,
+  "grabbed": 5198,
+  "pull_cm": 6.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 49.18,
+  "shape_update_ms": 3.38,
+  "deformed_gaussians": 36366,
+  "edges_over_1p5x": 0.0019310608655889736,
+  "edges_over_2x": 0.0005558944801695478,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.18
+}

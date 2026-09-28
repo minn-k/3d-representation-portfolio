@@ -2,13 +2,15 @@
 
 A public portfolio workspace for interactive and editable 3D representation research.
 
+**Portfolio site: https://minn-k.github.io/3d-representation-portfolio/**
+
 ## Focus
 
 - Structure-aware 3D Gaussian Splatting
 - Geometry-aware deformation and covariance updates
 - CUDA implementation for interactive rendering
 - OpenUSD and 3D-engine integration
-- A forthcoming generative 3D representation study
+- Generative 3D → editable, simulated Gaussian assets ([demos/generative-3d](demos/generative-3d))
 
 ## Related technical repositories
 

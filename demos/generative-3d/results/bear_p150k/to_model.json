@@ -1,0 +1,7 @@
+{
+  "source": "out/bear/gaussian.ply",
+  "total": 794944,
+  "kept": 150000,
+  "min_opacity": 0.02,
+  "keep": 150000
+}

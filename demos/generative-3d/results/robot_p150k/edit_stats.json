@@ -1,0 +1,15 @@
+{
+  "name": "gen_robot_p150k",
+  "gaussians": 147402,
+  "edges": 1433371,
+  "pinned": 126069,
+  "grabbed": 1550,
+  "pull_cm": 6.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 13.48,
+  "shape_update_ms": 1.11,
+  "deformed_gaussians": 9461,
+  "edges_over_1p5x": 0.0017106527200564264,
+  "edges_over_2x": 0.00047859207420828244,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.22
+}

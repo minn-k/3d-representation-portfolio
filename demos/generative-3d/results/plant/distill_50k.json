@@ -1,0 +1,12 @@
+{
+  "name": "plant",
+  "full": 337240,
+  "keep": 50000,
+  "iters": 3000,
+  "seconds": 11.2,
+  "psnr_prune_only": 20.34,
+  "psnr_distilled": 39.03,
+  "psnr_obj_prune_only": 14.23,
+  "psnr_obj_distilled": 32.96,
+  "res": 512
+}

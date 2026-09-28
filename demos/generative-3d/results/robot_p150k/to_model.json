@@ -1,0 +1,7 @@
+{
+  "source": "out/robot/gaussian.ply",
+  "total": 655936,
+  "kept": 150000,
+  "min_opacity": 0.02,
+  "keep": 150000
+}
