@@ -93,7 +93,7 @@
         <div class="asset-grid">
           <figure class="media"><img src="assets/gen_bear_image.jpg" alt="① 텍스트 → 이미지 (SDXL-Turbo)" loading="lazy"><figcaption>① 텍스트 → 이미지 (SDXL-Turbo)</figcaption></figure>
           <figure class="media"><video src="assets/gen_bear_turntable.mp4" poster="assets/gen_bear_turntable.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>② 이미지 → 3D Gaussians (TRELLIS)</figcaption></figure>
-          <figure class="media"><video src="assets/gen_bear_edit.mp4" poster="assets/gen_bear_edit.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>③ 10만 개로 재최적화 → 편집 — 왼쪽 위치만 갱신 · 오른쪽 위치 + Σ′ = FΣ₀Fᵀ</figcaption></figure>
+          <figure class="media"><video src="assets/gen_bear_edit.mp4" poster="assets/gen_bear_edit.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>③ 10만 개로 재최적화 → 잡아당겨 변형 (Σ′ = FΣ₀Fᵀ 적용)</figcaption></figure>
         </div>
         <p class="asset-note">귀를 잡아 옆으로 당김 — 부드러운 물체 · 생성 가우시안 794,944개 → 재최적화 99,999개 → 그래프 간선 958,701개
           (가장 큰 연결 성분 100.0%) · 2배 넘게 늘어난 간선 0%</p>
@@ -104,7 +104,7 @@
         <div class="asset-grid">
           <figure class="media"><img src="assets/gen_plant_image.jpg" alt="① 텍스트 → 이미지 (SDXL-Turbo)" loading="lazy"><figcaption>① 텍스트 → 이미지 (SDXL-Turbo)</figcaption></figure>
           <figure class="media"><video src="assets/gen_plant_turntable.mp4" poster="assets/gen_plant_turntable.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>② 이미지 → 3D Gaussians (TRELLIS)</figcaption></figure>
-          <figure class="media"><video src="assets/gen_plant_edit.mp4" poster="assets/gen_plant_edit.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>③ 10만 개로 재최적화 → 편집 — 왼쪽 위치만 갱신 · 오른쪽 위치 + Σ′ = FΣ₀Fᵀ</figcaption></figure>
+          <figure class="media"><video src="assets/gen_plant_edit.mp4" poster="assets/gen_plant_edit.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>③ 10만 개로 재최적화 → 잡아당겨 변형 (Σ′ = FΣ₀Fᵀ 적용)</figcaption></figure>
         </div>
         <p class="asset-note">잎 끝을 잡아 들어 올림 — 얇은 구조 · 생성 가우시안 470,048개 → 재최적화 99,961개 → 그래프 간선 945,343개
           (가장 큰 연결 성분 87.4%) · 2배 넘게 늘어난 간선 0.003%</p>
@@ -115,7 +115,7 @@
         <div class="asset-grid">
           <figure class="media"><img src="assets/gen_robot_image.jpg" alt="① 텍스트 → 이미지 (SDXL-Turbo)" loading="lazy"><figcaption>① 텍스트 → 이미지 (SDXL-Turbo)</figcaption></figure>
           <figure class="media"><video src="assets/gen_robot_turntable.mp4" poster="assets/gen_robot_turntable.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>② 이미지 → 3D Gaussians (TRELLIS)</figcaption></figure>
-          <figure class="media"><video src="assets/gen_robot_edit.mp4" poster="assets/gen_robot_edit.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>③ 10만 개로 재최적화 → 편집 — 왼쪽 위치만 갱신 · 오른쪽 위치 + Σ′ = FΣ₀Fᵀ</figcaption></figure>
+          <figure class="media"><video src="assets/gen_robot_edit.mp4" poster="assets/gen_robot_edit.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>③ 10만 개로 재최적화 → 잡아당겨 변형 (Σ′ = FΣ₀Fᵀ 적용)</figcaption></figure>
         </div>
         <p class="asset-note">팔을 잡아 들어 올림 — 캐릭터 자세 편집 · 생성 가우시안 655,936개 → 재최적화 99,570개 → 그래프 간선 963,700개
           (가장 큰 연결 성분 100.0%) · 2배 넘게 늘어난 간선 0.04%</p>
@@ -151,41 +151,62 @@
 
 <section id="semantic">
   <div class="wrap">
-    <p class="eyebrow">NEW · 탐색 실험</p>
-    <h2>생성 과정의 의미 신호로 가우시안에 부위 이름을 — 그리고 물리에</h2>
-    <p class="sub">원본 3DGS 의 가우시안은 자기가 머리인지 팔인지 모른다 — 색을 맞춘 결과일 뿐이다. 생성 모델은 다르다:
-      TRELLIS 는 3D 복셀을 만들 때 <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>와 <b>부위 구조가 담긴 중간 특징(DiT)</b>을 거친다.
-      이 두 신호를 생성 도중에 꺼내 2D 부위 이름을 3D 가우시안으로 옮기고, 그 부위로 물리 그래프를 다시 짰다.</p>
+    <p class="eyebrow">NEW · 생성 과정의 의미 정보 → 가우시안 부위 → 물리 편집</p>
+    <h2>가우시안마다 '어느 부위인지' 를 — 생성 모델 안에서 꺼내서</h2>
+    <p class="sub">원본 3DGS 의 가우시안은 자기가 머리인지 팔인지 모른다 — 색을 맞춘 결과일 뿐이다. TRELLIS 는 3D 복셀을 만들 때
+      <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>와 <b>부위 구조가 담긴 중간 특징(DiT)</b>을 거친다. 이 신호를 생성 도중에 꺼내
+      입력 이미지의 부위 이름을 3D 로 옮겼다. 결과: <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (PLY 속성으로 내보냄 ·
+      로봇 10만 개 = 머리 34,972 · 팔 21,017 · 몸통 17,990 · 다리 25,591).</p>
     <ol class="pipe">
       <li><span class="tag gen">2D</span><b>입력 이미지의 부위 이름</b><small>Grounding DINO + SAM</small></li>
       <li><span class="tag mine">생성 중간</span><b>① attention 투표</b><small>SLat 트랜스포머 블록 4·8·12 · 복셀 → 이미지 패치</small></li>
       <li><span class="tag mine">생성 중간</span><b>② DiT 특징 전파</b><small>블록 6·12 특징 k-NN 그래프 · 안 보이던 뒷면 채움</small></li>
-      <li><span class="tag mine">내 연구</span><b>가우시안 부위</b><small>가우시안 i → 복셀 i//32 → 토큰</small></li>
-      <li><span class="tag mine">내 연구</span><b>부위 인식 그래프</b><small>경계 간선 90% 제거 · 10% 는 관절로</small></li>
+      <li><span class="tag mine">결과</span><b>가우시안 part_id</b><small>가우시안 i → 복셀 i//32 → 토큰</small></li>
+      <li><span class="tag mine">내 연구</span><b>부위 단위 물리 편집</b><small>부위 선택 · 관절 자동 · XPBD</small></li>
     </ol>
     <div class="row2">
-      <figure class="media"><video src="assets/robot_sem_parts.mp4" poster="assets/robot_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>안내 로봇 — 왼쪽 생성 결과 · 오른쪽 가우시안 부위 (뒷면 포함, 입력 사진에 없던 쪽)</figcaption></figure>
-      <figure class="media"><video src="assets/bear_sem_parts.mp4" poster="assets/bear_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>곰 인형 — 같은 방법, 털 질감이 균일해 ② 전파가 특히 중요</figcaption></figure>
+      <figure class="media"><video src="assets/robot_sem_parts.mp4" poster="assets/robot_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>안내 로봇 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (뒷면 포함, 입력 사진에 없던 쪽)</figcaption></figure>
+      <figure class="media"><video src="assets/bear_sem_parts.mp4" poster="assets/bear_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>곰 인형 — 털 질감이 균일해 attention 만으로는 얼룩지고 ② 전파가 정리한다</figcaption></figure>
     </div>
+
+    <h3>그래서 무엇이 달라지나 — '오른팔을 들어라'</h3>
+    <p class="sub">기하 그래프만 있으면 '팔' 이라는 단위가 없다. 할 수 있는 것은 손끝 근처를 잡아 끄는 것뿐이고, 팔 모양은 그래프가 알아서 따라온다.
+      part_id 가 있으면 <b>'오른팔' 을 이름으로 통째로 고르고</b>, 팔과 몸통이 맞닿은 가우시안에서 <b>어깨 관절을 자동으로 찾아</b> 그 둘레로 돌린다.
+      몸통 · 머리는 두 경우 모두 같은 XPBD 물리로 따라온다. 같은 목표 (손끝 경로 동일, 60°).</p>
+    <figure class="media"><video src="assets/robot_pose_edit.mp4" poster="assets/robot_pose_edit.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>왼쪽 기하 그래프만 (손끝을 잡아 끎) · 오른쪽 의미 부위 ('오른팔' 을 어깨 관절 둘레로)</figcaption></figure>
+    <div class="table-wrap"><table class="metrics">
+      <tr><th></th><th>팔 모양 오차<br><small>강체 맞춤 후 RMS · 팔이 휘거나 늘어난 정도</small></th>
+        <th>팔이 돈 각도<br><small>목표 60°</small></th><th>몸통 변위<br><small>끌려온 정도</small></th><th>머리 변위</th></tr>
+      <tr><td>기하 그래프만</td><td>0.52 cm</td><td>60°</td>
+        <td>0.15 cm</td><td>0.03 cm</td></tr>
+      <tr><td>의미 부위</td><td><b>0.00 cm</b></td><td>57°</td>
+        <td>0.60 cm</td><td>0.18 cm</td></tr>
+    </table></div>
+    <p class="note">의미 부위 쪽은 팔이 곧은 채로 관절 둘레로 돈다 (모양 오차 0 — 팔 전체를 부착했기 때문). 대신 어깨를 통해 몸통이 더 끌려온다 —
+      기하 쪽은 팔이 휘면서 그 힘을 흡수한다. 차이는 '누가 더 좋은가' 가 아니라 <b>편집의 단위가 가우시안 덩어리에서 부위로 바뀐다</b>는 것이다.</p>
+
     <h3>어느 신호에 부위 정보가 있나 — 기준선과 비교</h3>
     <p class="note">행: 원래 색 · ① attention 만 · ① + ② · 기준선(DiT 특징 k-means, 이름 없음) · 기준선(좌표 k-means). 열: 네 방향.
-      좌표 군집은 머리와 몸을 가로질러 자르고, 특징 군집은 외관(무늬)으로 묶인다. 생성 과정의 attention 이 이름을, DiT 특징이 경계를 준다.</p>
+      좌표 군집은 머리와 몸을 가로질러 자르고, 특징 군집은 외관(무늬)으로 묶인다. 이름은 attention 이, 경계는 DiT 특징이 준다.</p>
     <div class="row2">
       <figure class="media"><img src="assets/robot_sem_parts3d_grid.jpg" alt="안내 로봇" loading="lazy"><figcaption>안내 로봇</figcaption></figure>
-      <figure class="media"><img src="assets/bear_sem_parts3d_grid.jpg" alt="곰 인형 — attention 만으로는 몸통에 조각이 섞이고 ② 가 정리한다" loading="lazy"><figcaption>곰 인형 — attention 만으로는 몸통에 조각이 섞이고 ② 가 정리한다</figcaption></figure>
+      <figure class="media"><img src="assets/bear_sem_parts3d_grid.jpg" alt="곰 인형" loading="lazy"><figcaption>곰 인형</figcaption></figure>
     </div>
-    <h3>물리: 부위 경계가 맞닿은 곳에서 끌려오는 정도</h3>
-    <p class="note">같은 하중(잡은 부위를 5~6 cm 당김, 아래 25~40% 고정), 같은 솔버. 기하 그래프 = 공분산 겹침만 · 부위 인식 = 경계 간선의 90% 제거.
-      거리 제약 강성만 낮추는 것으로는 효과가 없었다 — 국소 형상 유지 · 부피 제약의 클러스터가 그래프 연결로 만들어지기 때문에, 연결 자체를 바꿔야 했다.</p>
-    <div class='table-wrap'><table class='metrics'><tr><th>실험</th><th>부위 경계 간선<br><small>기하 그래프 중</small></th><th>맞닿은 다른 부위의 변위<br><small>잡은 부위 2.5 cm 이내 · 낮을수록 좋음</small></th><th>2배 넘게 늘어난 간선<br><small>낮을수록 좋음</small></th><th>잡은 부위 변위<br><small>참고</small></th></tr><tr><td>곰 인형 · 팔을 몸에서 벌림</td><td>2.82%</td><td>0.930 → <b>0.832</b> cm <small>(-11%)</small></td><td>0.287 → <b>0.192</b>% <small>(-33%)</small></td><td>0.99 → 0.98 cm</td></tr><tr><td>안내 로봇 · 손을 들어 올림</td><td>1.14%</td><td>0.090 → <b>0.086</b> cm <small>(-4%)</small></td><td>0.002 → <b>0.002</b>% <small>(+15%)</small></td><td>1.36 → 1.37 cm</td></tr></table></div>
-    <figure class="media"><video src="assets/bear_geom_vs_part.mp4" poster="assets/bear_geom_vs_part.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>곰 팔 벌리기 — 왼쪽 기하 그래프 · 오른쪽 부위 인식 그래프</figcaption></figure>
+
+    <h3>부위 경계에서의 연결 — 맞닿은 팔과 배</h3>
+    <p class="note">곰의 팔은 배에 붙어 있다. 기하 그래프는 둘을 겹침으로 연결해, 팔을 벌리면 배 표면이 끌려온다. 부위 경계를 넘는 간선의 90% 를 빼면
+      (10% 는 관절로 남김) 맞닿은 부위 끌림 0.93 → 0.83 cm
+      (-11%), 2배 넘게 늘어난 간선
+      0.287 → 0.192% (-33%).</p>
+    <figure class="media"><video src="assets/bear_geom_vs_part.mp4" poster="assets/bear_geom_vs_part.jpg" controls muted loop playsinline preload="metadata"></video><figcaption>곰 팔 벌리기 — 왼쪽 기하 그래프 · 오른쪽 부위 경계 간선 90% 제거</figcaption></figure>
+
     <div class="callout warn">
-      <b>정직한 결과</b>
+      <b>정직한 결과와 다음 단계</b>
       <ul>
-        <li>효과는 <b>있지만 크지 않다</b> (맞닿은 부위 끌림 약 −11%, 과신장 간선 약 −33%, 곰). 로봇은 팔이 어깨 한 점으로만 붙어 있어 기하 그래프도 원래 누수가 작다.</li>
-        <li>경계 간선을 <b>전부</b> 끊으면 팔이 떨어져 나간다 — 부위 사이에는 '관절' 연결이 필요하고, 지금은 무작위 10% 로 대신했다. 관절 위치를 의미 신호로 정하는 것이 다음 단계.</li>
-        <li>2D 부위 분할은 물체마다 검출 문구를 손으로 골랐다 (곰: 'paw' 가 발에 걸려 '발' 로 바꿈). 안테나처럼 가는 부위는 놓친다.</li>
-        <li>부위 → 재질 → 강체/무름 물성 연결은 아직 안 했다 (다음 단계).</li>
+        <li>부위 라벨은 잘 나온다 (앞 · 뒷면). 다만 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
+        <li>경계 간선 솎기의 물리 효과는 작다 (곰 −11% / −33%, 로봇은 거의 0). 강성만 낮추는 것은 효과가 없었다 — 형상 유지 · 부피 클러스터가 그래프 연결로 만들어지기 때문.</li>
+        <li>부위마다 다른 재질(몸 단단 · 팔 무름)도 시험했지만, 지금 솔버의 형상 유지가 물체 전체 하나의 강체 맞춤이라 부위별 강성이 제대로 표현되지 않았다 —
+          <b>부위 단위 강체 맞춤을 솔버에 넣는 것</b>, 관절 위치를 의미 신호로 정하는 것, 부위 → 재질 → 물성 연결이 다음 단계.</li>
       </ul>
     </div>
   </div>
@@ -212,8 +233,8 @@
           중심만 옮기면 늘어난 면이 찢어진다. 비용 <b>0.4 ms · 프레임의 약 2%</b>.</p></div>
     </div>
     <div class="row3">
-      <figure class="media"><img src="assets/chair_rest.jpg" alt="변형 전 (의자)" loading="lazy"><figcaption>변형 전 (의자)</figcaption></figure>
-      <figure class="media"><img src="assets/chair_posonly.jpg" alt="위치만 갱신 — 늘어난 면이 찢어짐" loading="lazy"><figcaption>위치만 갱신 — 늘어난 면이 찢어짐</figcaption></figure>
+      <figure class="media"><img src="assets/chair_posonly.jpg" alt="변형 전 (의자)" loading="lazy"><figcaption>변형 전 (의자)</figcaption></figure>
+      <figure class="media"><img src="assets/chair_rest.jpg" alt="위치만 갱신 — 늘어난 면이 찢어짐" loading="lazy"><figcaption>위치만 갱신 — 늘어난 면이 찢어짐</figcaption></figure>
       <figure class="media"><img src="assets/chair_posshape.jpg" alt="위치 + Σ′ 갱신 — 면이 이어짐" loading="lazy"><figcaption>위치 + Σ′ 갱신 — 면이 이어짐</figcaption></figure>
     </div>
   </div>
