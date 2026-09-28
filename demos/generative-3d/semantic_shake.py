@@ -6,7 +6,14 @@
 물성 = 거리 간선의 강성 (α̃ = compliance / 강성 / dt² — 전역 compliance 가 0 이면 강성이 무효라 켠다)
      + 물체 단위 형상 유지 (의미 쪽: 몸체 가우시안만 강체 맞춤에 참여 · 팔은 형상 유지 0).
 부위는 lift_parts.py 가 생성 과정의 신호로 가우시안마다 붙인 part_id.
-지표: 부위별 흔들림 = 받침 이동을 뺀 변위의 시간 RMS (cm). 출력 out/semantic_shake/<tag>.mp4 · .json
+지표: 부위별 흔들림 = 받침 이동을 뺀 변위의 시간 RMS (cm, --settle-s 가 있으면 늘어진 뒤 자세 기준). 출력 out/semantic_shake/<tag>.mp4 · .json
+
+팔이 축 늘어져 덜렁거리게 (몸체는 받침과 한 몸, 기존 그래프는 온몸이 젤리처럼):
+  semantic_shake.py --tag robot_dangle --gravity 9.81 --settle-s 1.5 --semantic-shape 0 --soft-stiff 0.3 \
+      --compliance 5e-5 --uniform-stiff 0.3 --uniform-shape 0.1 --damping 0.002 --shake-s 2.4 --seconds 5
+  --semantic-shape 0: 팔을 원래(들어 올린) 자세로 되돌리는 형상 유지를 끈다 → 중력에 늘어진다.
+  --settle-s: 촬영 전에 중력만으로 늘어뜨리는 시간 (영상에는 안 나온다, 흔들림 지표의 기준 자세).
+  팔이 너무 늘어나면 --soft-stiff 를 올리고, 기존 그래프 쪽이 주저앉으면 --uniform-shape 를 올린다.
 """
 import argparse
 import json
@@ -48,7 +55,9 @@ def main():
     ap.add_argument("--shake-s", type=float, default=1.6)
     ap.add_argument("--seconds", type=float, default=4.0)
     ap.add_argument("--damping", type=float, default=0.002)
-    ap.add_argument("--gravity", type=float, default=0.0)
+    ap.add_argument("--gravity", type=float, default=0.0, help="[m/s²] 두 쪽 모두 (9.81 이면 무른 부위가 늘어진다)")
+    ap.add_argument("--settle-s", type=float, default=0.0, help="촬영 전 흔들지 않고 중력으로 자리 잡는 시간 [s] (영상 제외)")
+    ap.add_argument("--titles", default="기존 그래프 · 온몸 같은 연체,의미 부위 · 몸체 강체 + 양팔만 연체")
     ap.add_argument("--gap", type=float, default=0.42)
     ap.add_argument("--res", default="1600x800")
     ap.add_argument("--eye", default="0,-1.1,0.34")
@@ -121,10 +130,17 @@ def main():
     offs = [np.array([-args.gap / 2, 0, 0]), np.array([args.gap / 2, 0, 0])]
     cam = Cam(vec(args.eye), vec(args.look), W, H, args.fovy)
     font = load_font(26)
-    titles = ["기존 그래프 · 온몸 같은 연체", "의미 부위 · 몸체 강체 + 양팔만 연체"]
+    titles = args.titles.split(",")
     frames, wob = [], {m: {n: [] for n in names} for m in ("uniform", "semantic")}
     n_steps = int(args.seconds * 60)
     import imageio
+    ref = {}                                                     # 흔들림 기준 자세 (늘어진 뒤)
+    for sim, mode in zip(sims, ("uniform", "semantic")):
+        ids = body_rigid if (mode == "semantic" and args.rigid_body) else pin
+        for _ in range(int(args.settle_s * 60)):
+            sim.set_attached(ids, np.ascontiguousarray(P0[ids].astype(np.float32)), 1.0)
+            sim.step()
+        ref[mode] = sim.positions().astype(np.float64) if args.settle_s > 0 else P0
     for k in range(n_steps):
         t = k / 60
         amp = args.amp * math.sin(2 * math.pi * args.freq * t) if t < args.shake_s else 0.0
@@ -138,7 +154,7 @@ def main():
             Ps, Qs, Ss, Os, Cs = [], [], [], [], []
             for sim, off, mode in zip(sims, offs, ("uniform", "semantic")):
                 P = sim.positions().astype(np.float64)
-                dev = np.linalg.norm((P - (P0 + base)) , axis=1) * s * 100    # 받침을 따라간 강체 이동을 뺀 흔들림
+                dev = np.linalg.norm(P - (ref[mode] + base), axis=1) * s * 100   # 받침을 따라간 이동을 뺀 흔들림
                 for kk, n in enumerate(names):
                     mm = (pa == kk) if n not in args.soft.split(",") else soft
                     if mm.sum() > 50:
@@ -163,7 +179,7 @@ def main():
     imageio.imwrite(os.path.join(out, f"{args.tag}_mid.png"), frames[int(len(frames) * 0.35)])
     rms = {m: {n: round(float(np.sqrt(np.mean(np.square(v)))), 3) for n, v in c.items() if v} for m, c in wob.items()}
     peak = {m: {n: round(float(np.max(v)), 3) for n, v in c.items() if v} for m, c in wob.items()}
-    st = {k_: getattr(args, k_) for k_ in ("asset", "soft", "compliance", "soft_stiff", "uniform_stiff", "uniform_shape", "semantic_shape", "rigid_body", "pin_h", "amp",
+    st = {k_: getattr(args, k_) for k_ in ("asset", "soft", "compliance", "soft_stiff", "uniform_stiff", "uniform_shape", "semantic_shape", "rigid_body", "pin_h", "amp", "settle_s",
                                             "freq", "shake_s", "seconds", "damping", "gravity")}
     st.update({"soft_gaussians": int(soft.sum()), "wobble_rms_cm": rms, "wobble_peak_cm": peak})
     json.dump(st, open(os.path.join(out, f"{args.tag}.json"), "w"), indent=2, ensure_ascii=False)
