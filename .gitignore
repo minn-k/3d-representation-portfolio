@@ -4,6 +4,10 @@ __pycache__/
 .venv/
 venv/
 .env
+.pytest_cache/
+
+# External checkouts (clone them yourself, see README)
+demos/generative-3d/TRELLIS/
 
 # Local data, generated assets, and build outputs
 data/
