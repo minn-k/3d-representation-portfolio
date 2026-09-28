@@ -1,0 +1,12 @@
+{
+  "name": "letter_T",
+  "full": 503697,
+  "keep": 50000,
+  "iters": 3000,
+  "seconds": 11.4,
+  "psnr_prune_only": 19.03,
+  "psnr_distilled": 28.06,
+  "psnr_obj_prune_only": 13.98,
+  "psnr_obj_distilled": 23.16,
+  "res": 512
+}

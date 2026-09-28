@@ -1,0 +1,8 @@
+{
+  "nodes": 49998,
+  "undirected_edges": 469302,
+  "components": 2,
+  "largest_pct": 99.9179967198688,
+  "degree_median": 18.0,
+  "degree_max": 42
+}

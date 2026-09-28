@@ -1,0 +1,12 @@
+{
+  "name": "letter_L",
+  "image": "C:\\gaussian-splatting\\genai\\out\\letter_L\\i2i_s3.png",
+  "seed": 1,
+  "gaussians": 296640,
+  "load_s": 17.5,
+  "generate_s": 7.8,
+  "peak_vram_gb": 5.57,
+  "ss_steps": 25,
+  "slat_steps": 25,
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER"
+}

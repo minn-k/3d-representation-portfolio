@@ -1,0 +1,12 @@
+{
+  "name": "robot",
+  "full": 580204,
+  "keep": 100000,
+  "iters": 3000,
+  "seconds": 13.1,
+  "psnr_prune_only": 27.19,
+  "psnr_distilled": 49.13,
+  "psnr_obj_prune_only": 21.41,
+  "psnr_obj_distilled": 43.37,
+  "res": 512
+}

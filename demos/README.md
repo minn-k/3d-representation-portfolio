@@ -1,3 +1,6 @@
 # Demonstrations
 
-Self-contained demonstrations belong here. The first planned addition is a small, reproducible generative image-to-3D or editable-3D study. Model weights and private inputs remain outside this repository.
+- [generative-3d](generative-3d): text/image → SDXL-Turbo → TRELLIS 3D Gaussians → count reduction (prune + re-fit) →
+  APG-GS structure graph → XPBD editing with Σ′ = FΣ₀Fᵀ, plus the letter-drop opener of the portfolio site.
+
+Model weights, private inputs, and generated assets remain outside this repository.

@@ -1,0 +1,15 @@
+{
+  "name": "gen_plant",
+  "gaussians": 308076,
+  "edges": 3040105,
+  "pinned": 122627,
+  "grabbed": 2094,
+  "pull_cm": 7.000000000000001,
+  "steps": 300,
+  "xpbd_ms_per_step": 51.19,
+  "shape_update_ms": 2.05,
+  "deformed_gaussians": 18206,
+  "edges_over_1p5x": 0.0006815554068033834,
+  "edges_over_2x": 0.00013190333886494053,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.46
+}

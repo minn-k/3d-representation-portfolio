@@ -1,0 +1,12 @@
+{
+  "name": "plant",
+  "image": "C:\\gaussian-splatting\\genai\\out\\plant\\text2img_s0.png",
+  "seed": 1,
+  "gaussians": 470048,
+  "load_s": 19.4,
+  "generate_s": 20.6,
+  "peak_vram_gb": 5.69,
+  "ss_steps": 25,
+  "slat_steps": 25,
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER"
+}

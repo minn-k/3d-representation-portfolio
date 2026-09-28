@@ -1,0 +1,15 @@
+{
+  "name": "gen_plant_d50k",
+  "gaussians": 49996,
+  "edges": 467204,
+  "pinned": 24228,
+  "grabbed": 460,
+  "pull_cm": 7.000000000000001,
+  "steps": 300,
+  "xpbd_ms_per_step": 9.84,
+  "shape_update_ms": 0.43,
+  "deformed_gaussians": 7080,
+  "edges_over_1p5x": 0.00014982748435372984,
+  "edges_over_2x": 1.2842355801748273e-05,
+  "mean_abs_pixel_diff_pos_vs_shape": 1.35
+}

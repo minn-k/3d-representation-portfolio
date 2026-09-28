@@ -1,0 +1,18 @@
+{
+  "model": "stabilityai/sdxl-turbo",
+  "prompt": "a potted monstera plant with large leaves in a white ceramic pot, single object, full body, centered, 3/4 view, plain white background, soft studio lighting, high detail",
+  "steps": 2,
+  "images": [
+    {
+      "seed": 0,
+      "path": "C:\\gaussian-splatting\\genai\\out\\plant\\text2img_s0.png",
+      "seconds": 0.89
+    },
+    {
+      "seed": 1,
+      "path": "C:\\gaussian-splatting\\genai\\out\\plant\\text2img_s1.png",
+      "seconds": 0.29
+    }
+  ],
+  "note": "gen2d.py \uc2e4\ud589 \ub85c\uadf8\uc5d0\uc11c \uc62e\uae40 (s2 \uc5d0\uc11c VRAM \ubd80\uc871\uc73c\ub85c \uc911\ub2e8)"
+}

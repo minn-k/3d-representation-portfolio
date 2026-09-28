@@ -1,0 +1,12 @@
+{
+  "name": "bear",
+  "image": "C:\\gaussian-splatting\\genai\\out\\bear\\text2img_s3.png",
+  "seed": 1,
+  "gaussians": 794944,
+  "load_s": 20.6,
+  "generate_s": 25.1,
+  "peak_vram_gb": 5.91,
+  "ss_steps": 25,
+  "slat_steps": 25,
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER"
+}

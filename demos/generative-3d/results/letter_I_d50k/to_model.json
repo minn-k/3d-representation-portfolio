@@ -1,0 +1,7 @@
+{
+  "source": "out/letter_I/distill_50k.ply",
+  "total": 50000,
+  "kept": 50000,
+  "min_opacity": 0.02,
+  "keep": 0
+}

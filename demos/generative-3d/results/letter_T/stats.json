@@ -1,0 +1,12 @@
+{
+  "name": "test_T",
+  "image": "C:\\gaussian-splatting\\genai\\TRELLIS\\assets\\example_image\\T.png",
+  "seed": 1,
+  "gaussians": 510080,
+  "load_s": 37.1,
+  "generate_s": 17.1,
+  "peak_vram_gb": 5.72,
+  "ss_steps": 25,
+  "slat_steps": 25,
+  "gpu": "NVIDIA GeForce RTX 4070 SUPER"
+}

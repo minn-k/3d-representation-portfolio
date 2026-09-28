@@ -1,0 +1,15 @@
+{
+  "name": "gen_plant_p150k",
+  "gaussians": 149872,
+  "edges": 1430039,
+  "pinned": 56744,
+  "grabbed": 1300,
+  "pull_cm": 7.000000000000001,
+  "steps": 300,
+  "xpbd_ms_per_step": 20.31,
+  "shape_update_ms": 1.14,
+  "deformed_gaussians": 14567,
+  "edges_over_1p5x": 0.00039789124632265275,
+  "edges_over_2x": 2.237701209547432e-05,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.54
+}

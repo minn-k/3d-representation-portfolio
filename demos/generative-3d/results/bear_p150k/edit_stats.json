@@ -1,0 +1,15 @@
+{
+  "name": "gen_bear_p150k",
+  "gaussians": 149992,
+  "edges": 1467851,
+  "pinned": 94264,
+  "grabbed": 2198,
+  "pull_cm": 6.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 17.93,
+  "shape_update_ms": 1.22,
+  "deformed_gaussians": 51865,
+  "edges_over_1p5x": 0.00031406457467413247,
+  "edges_over_2x": 4.087608347168752e-06,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.24
+}

@@ -1,0 +1,15 @@
+{
+  "name": "gen_robot_d50k",
+  "gaussians": 49958,
+  "edges": 481633,
+  "pinned": 41736,
+  "grabbed": 319,
+  "pull_cm": 6.0,
+  "steps": 300,
+  "xpbd_ms_per_step": 9.31,
+  "shape_update_ms": 0.46,
+  "deformed_gaussians": 3731,
+  "edges_over_1p5x": 0.0007453808190053422,
+  "edges_over_2x": 5.813555134303505e-05,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.32
+}

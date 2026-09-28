@@ -1,0 +1,12 @@
+{
+  "name": "letter_I",
+  "full": 203676,
+  "keep": 50000,
+  "iters": 3000,
+  "seconds": 8.6,
+  "psnr_prune_only": 28.46,
+  "psnr_distilled": 48.29,
+  "psnr_obj_prune_only": 22.5,
+  "psnr_obj_distilled": 42.35,
+  "res": 512
+}

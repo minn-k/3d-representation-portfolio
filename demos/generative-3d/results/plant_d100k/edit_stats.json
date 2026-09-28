@@ -1,0 +1,15 @@
+{
+  "name": "gen_plant_d100k",
+  "gaussians": 99961,
+  "edges": 945343,
+  "pinned": 40228,
+  "grabbed": 872,
+  "pull_cm": 7.000000000000001,
+  "steps": 300,
+  "xpbd_ms_per_step": 19.14,
+  "shape_update_ms": 1.04,
+  "deformed_gaussians": 9634,
+  "edges_over_1p5x": 0.0003363858409064223,
+  "edges_over_2x": 3.490796462236458e-05,
+  "mean_abs_pixel_diff_pos_vs_shape": 0.67
+}
