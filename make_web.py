@@ -123,10 +123,6 @@ def build_media():
     if os.path.exists(sv):                                            # 핵심 영상: 흔들기 (semantic_shake.py)
         enc(sv, os.path.join(A, "robot_shake.mp4"))
         first_frame(os.path.join(A, "robot_shake.mp4"), os.path.join(A, "robot_shake.jpg"), 1.0)
-    bv = os.path.join(GEN, "bear_sem_d100k", "edit_geom_vs_part.mp4")
-    if os.path.exists(bv):
-        enc(bv, os.path.join(A, "bear_geom_vs_part.mp4"))
-        first_frame(os.path.join(A, "bear_geom_vs_part.mp4"), os.path.join(A, "bear_geom_vs_part.jpg"), 3.5)
     return rows
 
 
@@ -218,10 +214,8 @@ def sem_section():
         return jl(p) if os.path.exists(p) else None
     sh = jl(os.path.join(GEN, "semantic_shake", "robot_b.json"))
     wu, ws = sh["wobble_rms_cm"]["uniform"], sh["wobble_rms_cm"]["semantic"]
-    g, p = st("bear_sem_d100k", "geom"), st("bear_sem_d100k", "part")
     counts = {n: int(v) for n, v in zip(["head", "antenna", "arm", "torso", "leg"],
                                          np.bincount(np.load(os.path.join(GEN, "robot_sem", "parts3d.npz"))["asset_part"]))}
-    pct_ = lambda a, b: f"{(b - a) / a * 100:+.0f}%"  # noqa: E731
     return f"""
 <section id="semantic">
   <div class="wrap">
@@ -265,18 +259,10 @@ def sem_section():
       {img("bear_sem_parts3d_grid.jpg", "곰 인형")}
     </div>
 
-    <h3>부위 경계에서의 연결 — 맞닿은 팔과 배</h3>
-    <p class="note">곰의 팔은 배에 붙어 있다. 기하 그래프는 둘을 겹침으로 연결해, 팔을 벌리면 배 표면이 끌려온다. 부위 경계를 넘는 간선의 90% 를 빼면
-      (10% 는 관절로 남김) 맞닿은 부위 끌림 {g['disp_cm_near_other_parts']:.2f} → {p['disp_cm_near_other_parts']:.2f} cm
-      ({pct_(g['disp_cm_near_other_parts'], p['disp_cm_near_other_parts'])}), 2배 넘게 늘어난 간선
-      {g['edges_over_2x'] * 100:.3f} → {p['edges_over_2x'] * 100:.3f}% ({pct_(g['edges_over_2x'], p['edges_over_2x'])}).</p>
-    {video("bear_geom_vs_part.mp4", "bear_geom_vs_part.jpg", "곰 팔 벌리기 — 왼쪽 기하 그래프 · 오른쪽 부위 경계 간선 90% 제거")}
-
     <div class="callout warn">
       <b>정직한 결과와 다음 단계</b>
       <ul>
         <li>부위 라벨은 잘 나온다 (앞 · 뒷면). 다만 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
-        <li>경계 간선 솎기의 물리 효과는 작다 (곰 −11% / −33%, 로봇은 거의 0). 강성만 낮추는 것은 효과가 없었다 — 형상 유지 · 부피 클러스터가 그래프 연결로 만들어지기 때문.</li>
         <li>'단단한 부위' 는 지금 강체로 처리했다 — 솔버의 형상 유지가 물체 전체 하나의 강체 맞춤뿐이라, 연체 안에서 부위마다 다른 강성
           (예: 몸통은 조금만 출렁)은 아직 표현하지 못한다. <b>부위 단위 강체 맞춤을 솔버에 넣는 것</b>, 부위 → 재질 → 물성 자동 연결이 다음 단계.</li>
       </ul>
