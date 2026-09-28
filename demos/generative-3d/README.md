@@ -32,3 +32,9 @@ removing 90% of cross-part edges.
 - Bear arm pull: touching parts are dragged about 11% less and edges stretched beyond 2× drop about 33%.
   The robot, whose arm attaches at one shoulder, shows almost no change.
 - Part prompts were chosen per object; thin parts can be missed.
+
+Part-level editing (`semantic_pose.py`): with `part_id`, "the right arm" is selected by name, the shoulder joint is found
+where arm and torso Gaussians touch, and the whole arm is rotated about it (60°); XPBD moves the rest. The geometry-only
+baseline can only drag the hand. Arm shape error 0.52 cm (geometry) vs 0 (part), torso drag 0.15 vs 0.60 cm.
+Per-part materials (`semantic_drop.py`: rigid body, soft arms) were not convincing with the current solver, whose shape
+matching is a single object-level rigid fit; per-part rigid fitting in the solver is the next step.
