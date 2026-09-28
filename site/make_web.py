@@ -1,10 +1,10 @@
-r"""종합 포트폴리오 웹페이지 (생성형 3D 데모 + APG-GS + 엔진 통합) 만들기.
+r"""종합 포트폴리오 웹페이지 (생성형 3D 데모 + APG-GS) 만들기.
 
   C:\anaconda\anaconda3\envs\trellis\python.exe make_web.py
 
 만드는 것: index.html, assets/* (영상·그림 복사, 새 영상은 H.264 faststart 로 다시 인코딩)
 숫자는 전부 genai/out/<name>/*.json (측정 로그) 에서 읽는다 — 손으로 쓰지 않는다.
-기존 영상(prior_research_demo, wolf/ficus/lego_compare)은 ../portfolio_site/assets 의 것을 그대로 쓴다.
+기존 APG-GS 영상은 ../portfolio_site/assets 에서 가져온다.
 """
 import html
 import json
@@ -101,15 +101,13 @@ def build_media():
         enc(ld, os.path.join(A, "letters_drop.mp4"))
         first_frame(os.path.join(A, "letters_drop.mp4"), os.path.join(A, "letters_drop.jpg"), 4.0)
     # 기존 연구 영상·그림
-    for f in ("prior_research_demo", "wolf_compare", "ficus_compare"):
+    for f in ("prior_research_demo",):
         for ext in ("mp4", "jpg"):
             s = os.path.join(OLD, f"{f}.{ext}")
             if os.path.exists(s):
                 shutil.copy2(s, os.path.join(A, f"{f}.{ext}"))
-    for f in ("cov_pull_rest", "cov_pull_posonly", "cov_pull_posshape", "fl_lego_before", "fl_lego_after",
-              "pick_ficus"):
+    for f in ("cov_pull_rest", "cov_pull_posonly", "cov_pull_posshape"):
         poster(os.path.join(MEDIA, f"{f}.png"), os.path.join(A, f"{f}.jpg"), 720)
-    shutil.copy2(os.path.join(OLD, "KwonSangmin_Portfolio.pdf"), os.path.join(A, "KwonSangmin_Portfolio_3DGS_Sim.pdf"))
     return rows
 
 
@@ -203,7 +201,7 @@ def page(rows):
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>권상민 · 3D Representation Portfolio</title>
-<meta name="description" content="생성된 3D 를 편집·상호작용 가능한 컨텐츠로 — 3D Gaussian Splatting · Generative 3D · CUDA · OpenUSD">
+<meta name="description" content="생성된 3D 를 편집·상호작용 가능한 컨텐츠로 — 3D Gaussian Splatting · Generative 3D · CUDA">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -212,7 +210,7 @@ def page(rows):
   <div class="wrap nav-in">
     <a class="brand" href="#top">Sangmin Kwon</a>
     <div class="links">
-      <a href="#genai">생성형 3D 데모</a><a href="#apg">APG-GS</a><a href="#engine">엔진 통합</a>
+      <a href="#genai">생성형 3D 데모</a><a href="#apg">APG-GS</a>
       <a href="#background">배경</a><a href="#next">다음 연구</a>
     </div>
   </div>
@@ -233,7 +231,6 @@ def page(rows):
     <div class="cta">
       <a class="btn primary" href="#genai">생성형 3D 데모 보기</a>
       <a class="btn" href="{GITHUB}" target="_blank" rel="noopener">GitHub (코드)</a>
-      <a class="btn" href="assets/KwonSangmin_Portfolio_3DGS_Sim.pdf" target="_blank" rel="noopener">상세 슬라이드 (PDF)</a>
     </div>
     <div class="cards3">
       <div class="card"><span class="k">01 · 생성 → 편집</span>
@@ -241,7 +238,7 @@ def page(rows):
       <div class="card"><span class="k">02 · 표현의 깊이</span>
         <p>가우시안을 점이 아닌 비등방 타원체로 보고 Bhattacharyya 겹침으로 구조를 복원, 변형 때 공분산까지 Σ′ = FΣ₀Fᵀ 로 갱신.</p></div>
       <div class="card"><span class="k">03 · 끝까지 구현</span>
-        <p>CUDA XPBD 솔버(10만 가우시안 1프레임 5.7 ms), OpenGL 뷰어, OpenUSD · Isaac Sim 실시간 통합과 병목 측정.</p></div>
+        <p>CUDA XPBD 솔버(10만 가우시안 1프레임 5.7 ms), OpenGL 기반 3DGS 뷰어와 편집 결과 렌더링까지 구현.</p></div>
     </div>
   </div>
 </header>
@@ -253,7 +250,7 @@ def page(rows):
       <tr><th>필요 역량</th><th>근거</th></tr>
       <tr><td>생성형 2D/3D</td><td>SDXL-Turbo(2D) · TRELLIS(3D, structured latent → Gaussian)를 로컬 GPU 에 직접 올려 파이프라인 구성, 출력 표현을 편집 엔진에 연결 <a href="#genai">→ 데모</a></td></tr>
       <tr><td>Graphics 이론</td><td>3DGS 공분산·투영, 변형 기울기 F 추정과 Σ′ = FΣ₀Fᵀ, Bhattacharyya 거리, 볼륨 렌더링(ray marching · transfer function) <a href="#apg">→ APG-GS</a></td></tr>
-      <tr><td>3D Editor / Game Engine 툴</td><td>Isaac Sim(Omniverse) 에 OpenUSD 장면 · PhysX 동기화 · Fabric 실시간 갱신, SIBR(OpenGL) 뷰어에 그래프·편집 기능 추가 <a href="#engine">→ 엔진 통합</a></td></tr>
+      <tr><td>실시간 3D 편집 도구</td><td>SIBR(OpenGL) 뷰어에 가우시안 그래프 구축·변형·공분산 갱신 기능을 구현하고, 생성 결과를 같은 편집 파이프라인으로 연결 <a href="#apg">→ APG-GS</a></td></tr>
       <tr><td>Graphics API</td><td>OpenGL(의료 볼륨 렌더링, SIBR 뷰어), CUDA 커널 설계·최적화(워프 단위 gather, atomic 없는 결정적 누적)</td></tr>
       <tr><td>AR 컨텐츠 저작</td><td>찍거나 생성한 3D 를 편집·상호작용 가능한 에셋으로 만드는 전 과정(정리 → 정렬 → 구조 → 변형 → 엔진)을 한 명령으로</td></tr>
     </table></div>
@@ -343,27 +340,6 @@ def page(rows):
   </div>
 </section>
 
-<section id="engine">
-  <div class="wrap">
-    <p class="eyebrow">엔진 통합 · OpenUSD · Isaac Sim 6.1</p>
-    <h2>연구 엔진을 표준 3D 엔진 안으로</h2>
-    <p class="sub">Isaac Sim 은 3DGS 를 그릴 수는 있지만 물리 객체로 다루지 않는다 (충돌은 볼록 껍질 강체 하나).
-      APG-GS 를 CUDA DLL 로 떼어 PhysX 스텝마다 돌리고, 결과를 Fabric 으로 RTX 렌더러에 실시간 반영했다.</p>
-    <ul class="facts">
-      <li><b>데이터 준비 한 명령</b> — floater 정리(실루엣 · 어두운 얼룩) → 크롭 → 축 정렬 → 그래프 → 순서 대응(뷰어↔USD 비트 단위 일치) → USD</li>
-      <li><b>병목 측정 후 최적화</b> — 1프레임 146 ms 중 렌더러의 Splat 재적재 45%, XPBD 25%. 렌더 1프레임에 물리 4스텝으로 시뮬레이션 속도 0.16× → 0.49× (실시간 대비), 멈춘 동안 쓰기 생략으로 6.9 → 12.6 FPS</li>
-      <li><b>렌더 형상 = 충돌 형상</b> — 가우시안 타원체로 접촉 판정: 손가락 안으로 파고든 가우시안 35 → 1개 (적을수록 좋음)</li>
-    </ul>
-    <div class="row2">
-      {video("wolf_compare.mp4", "wolf_compare.jpg", "비교 1 · 누르기 · 던지기 — 왼쪽 Isaac 기본(볼록 껍질 강체) · 오른쪽 APG-GS")}
-      {video("ficus_compare.mp4", "ficus_compare.jpg", "비교 2 · 로봇이 잎을 잡고 들기 — 같은 관절 명령")}
-    </div>
-    <div class="row2">
-      {img("fl_lego_before.jpg", "floater 정리 전 — 밝은 배경에서 검은 얼룩")}
-      {img("fl_lego_after.jpg", "정리 후 — 실루엣 투영 + 어두운 큰 가우시안 제거")}
-    </div>
-  </div>
-</section>
 
 <section id="background">
   <div class="wrap">
@@ -373,7 +349,7 @@ def page(rows):
       <li><b>볼륨 렌더링</b><span>의료 볼륨 데이터 · ray marching · transfer function · CUDA / OpenGL</span></li>
       <li><b>NeRF</b><span>암시적 신경 장면 표현 · 볼륨 렌더링 기반 novel view synthesis</span></li>
       <li><b>3D Gaussian Splatting</b><span>명시적 가우시안 표현 · 실시간 래스터화</span></li>
-      <li><b>편집 · 상호작용 가능한 3DGS</b><span>APG-GS (CG&amp;A) · CUDA XPBD · Isaac Sim 통합</span></li>
+      <li><b>편집 가능한 3DGS</b><span>APG-GS (CG&amp;A) · CUDA XPBD · 공분산 갱신</span></li>
       <li class="next"><b>생성형 3D · 공간 컨텐츠</b><span>이번 데모에서 시작 → 다음 연구</span></li>
     </ol>
   </div>
