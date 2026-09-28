@@ -301,6 +301,7 @@ def page(rows):
       playsinline controls preload="auto"></video>
       <figcaption>TRELLIS 로 생성한 글자 3D Gaussians 에 APG-GS 물리(CUDA XPBD)를 입혀 떨어뜨렸다 — 세우는 보정 없이 물리 그대로:
         두께 3~9 cm 의 무른 글자 판이 착지하며 눌리고 튕기다 넘어진다.
+        마지막 구간에서는 바닥 높이를 짧게 올렸다 내려, 누운 글자들이 젤리처럼 출렁이며 튀어 오른다.
         T 는 TRELLIS 예제 이미지, 나머지 글자는 SDXL-Turbo 로 같은 스타일을 만들어 생성 · 글자당 5만 개로 재최적화 · 연출은 TRELLIS 프로젝트 티저 영상을 따라 했다.</figcaption></figure>
     <p class="eyebrow">Graphics · 3D Representation · Generative 3D</p>
     <h1>생성된 3D 를<br>편집하고 만질 수 있는 컨텐츠로</h1>
