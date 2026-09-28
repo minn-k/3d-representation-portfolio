@@ -1,0 +1,30 @@
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Local data, generated assets, and build outputs
+data/
+artifacts/
+outputs/
+cache/
+*.ply
+*.npz
+*.usd
+*.usda
+*.usdc
+*.dll
+*.lib
+*.pdb
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Editor and operating-system state
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
