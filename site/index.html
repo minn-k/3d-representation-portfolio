@@ -191,18 +191,10 @@
       <figure class="media"><img src="assets/bear_sem_parts3d_grid.jpg" alt="곰 인형" loading="lazy"><figcaption>곰 인형</figcaption></figure>
     </div>
 
-    <h3>부위 경계에서의 연결 — 맞닿은 팔과 배</h3>
-    <p class="note">곰의 팔은 배에 붙어 있다. 기하 그래프는 둘을 겹침으로 연결해, 팔을 벌리면 배 표면이 끌려온다. 부위 경계를 넘는 간선의 90% 를 빼면
-      (10% 는 관절로 남김) 맞닿은 부위 끌림 0.93 → 0.83 cm
-      (-11%), 2배 넘게 늘어난 간선
-      0.287 → 0.192% (-33%).</p>
-    <figure class="media"><video src="assets/bear_geom_vs_part.mp4" poster="assets/bear_geom_vs_part.jpg" controls muted loop playsinline preload="metadata"></video><figcaption>곰 팔 벌리기 — 왼쪽 기하 그래프 · 오른쪽 부위 경계 간선 90% 제거</figcaption></figure>
-
     <div class="callout warn">
       <b>정직한 결과와 다음 단계</b>
       <ul>
         <li>부위 라벨은 잘 나온다 (앞 · 뒷면). 다만 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
-        <li>경계 간선 솎기의 물리 효과는 작다 (곰 −11% / −33%, 로봇은 거의 0). 강성만 낮추는 것은 효과가 없었다 — 형상 유지 · 부피 클러스터가 그래프 연결로 만들어지기 때문.</li>
         <li>'단단한 부위' 는 지금 강체로 처리했다 — 솔버의 형상 유지가 물체 전체 하나의 강체 맞춤뿐이라, 연체 안에서 부위마다 다른 강성
           (예: 몸통은 조금만 출렁)은 아직 표현하지 못한다. <b>부위 단위 강체 맞춤을 솔버에 넣는 것</b>, 부위 → 재질 → 물성 자동 연결이 다음 단계.</li>
       </ul>
