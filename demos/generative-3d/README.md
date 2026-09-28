@@ -85,6 +85,11 @@ The camera is recovered to 0.7 px (silhouette IoU 0.991). The body is still the 
 labeled in 2D; with its visible sides labeled as well, the hidden body reaches about 0.82. Check `camera_fit.png` after
 each run.
 
+On the real bear (`results/bear_sem/parts3d_stats_try1.json`, `_try2.json`, `parts3d_stats.json`) the estimated camera
+reaches silhouette IoU 0.894 (0.298 from attention alone) with colour correlation 0.41. The share of Gaussians labeled
+body goes from 11.6% (1st) to 15.0% (2nd) to 25.2% (3rd) as the hidden sides and back return to the body. There is no
+ground truth, so the part turntables are the check. A little arm label remains on the back of the head.
+
 ### Using the labels
 
 - **Part-aware graph** (`edit_demo.py --parts`, `part_graph.py`). A cross-part edge joins two confident Gaussians of
