@@ -233,7 +233,7 @@ def sem_section():
     </ol>
     <div class="row2">
       {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (뒷면 포함, 입력 사진에 없던 쪽)", True)}
-      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 사진에 보이는 쪽은 2D 부위를 그대로, 가려진 옆 · 뒤는 부피 기준으로 (아래 시행착오의 3차)", True)}
+      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (아래 시행착오의 3차 결과)", True)}
     </div>
 
     <h3>그래서 무엇이 달라지나 — 부위마다 다른 물성</h3>
@@ -242,52 +242,53 @@ def sem_section():
       같은 받침을 같은 폭(±{sh['amp'] * 100:.0f} cm · {sh['freq']:.0f} Hz · {sh['shake_s']:.1f} s)으로 흔든 뒤 멈춘다.</p>
     {video("robot_shake.mp4", "robot_shake.jpg", "왼쪽 기존 그래프 · 온몸 같은 연체 · 오른쪽 의미 부위 · 몸체 강체 + 양팔만 연체", True)}
     <div class="table-wrap"><table class="metrics">
-      <tr><th>흔들림 (받침 이동을 뺀 변위 RMS)</th><th>머리</th><th>몸통</th><th>팔</th></tr>
-      <tr><td>기존 그래프 · 온몸 같은 연체</td><td>{wu['head']:.2f} cm</td><td>{wu['torso']:.2f} cm</td><td>{wu['arm']:.2f} cm</td></tr>
-      <tr><td>의미 부위 · 몸체 강체 + 양팔 연체</td><td><b>{ws['head']:.2f} cm</b></td><td><b>{ws['torso']:.2f} cm</b></td><td><b>{ws['arm']:.2f} cm</b></td></tr>
+      <tr><th>흔들림 (cm)<br><small>받침을 흔드는 동안 각 부위가 받침과 따로 움직인 거리의 평균 (RMS)<br>0 = 받침과 한 몸으로 움직임 (단단) · 클수록 많이 출렁임</small></th><th>머리</th><th>몸통</th><th>팔</th></tr>
+      <tr><td>기존 그래프 · 온몸 같은 연체</td><td>{wu['head']:.2f}</td><td>{wu['torso']:.2f}</td><td>{wu['arm']:.2f}</td></tr>
+      <tr><td>의미 부위 · 몸체 강체 + 양팔 연체</td><td><b>{ws['head']:.2f}</b></td><td><b>{ws['torso']:.2f}</b></td><td><b>{ws['arm']:.2f}</b></td></tr>
     </table></div>
-    <p class="note">물성 — 기존 그래프: 온몸 간선 강성 {sh['uniform_stiff']} · 물체 형상 유지 {sh['uniform_shape']} (다리만 받침에 고정).
+    <p class="note">목표는 머리 · 몸통은 0 (단단), 팔만 출렁임 — 의미 부위 쪽이 그대로 나왔고, 기존 그래프는 온몸이 같이 출렁인다.
+      물성 — 기존 그래프: 온몸 간선 강성 {sh['uniform_stiff']} · 물체 형상 유지 {sh['uniform_shape']} (다리만 받침에 고정).
       의미 부위: part_id 가 팔이 아닌 가우시안(몸통 · 머리 · 다리)은 강체로 받침과 함께 움직이고, 팔 가우시안만 간선 강성 {sh['soft_stiff']} ·
       형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계.</p>
 
-    <h3>어느 신호에 부위 정보가 있나 — 기준선과 비교</h3>
-    <p class="note">행: 원래 색 · ① attention 만 · ① + ② · 기준선(DiT 특징 k-means, 이름 없음) · 기준선(좌표 k-means). 열: 네 방향.
-      좌표 군집은 머리와 몸을 가로질러 자르고, 특징 군집은 외관(무늬)으로 묶인다. 이름은 attention 이, 경계는 DiT 특징이 준다.</p>
-    <div class="narrow">
-      {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
-    </div>
-
-    <h3>시행착오 — 곰 인형 팔이 섞이던 문제를 세 번에 걸쳐 고치기</h3>
-    <p class="sub">털 질감이 고른 곰 인형에서 한쪽 팔에 다른 부위가 섞였다. 원인을 하나씩 찾아 고쳤다 —
+    <h3>분류는 어떻게 다듬었나 — 곰 인형에서의 시행착오</h3>
+    <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (좌표 k-means 는 머리와 몸을 가로질러 자르고, 특징 k-means 는 무늬로 묶는다).
+      그래서 생성 모델이 입력 사진의 어디를 보는지(attention)에서 출발했고, 털 질감이 고른 곰 인형에서 부위가 섞이는 문제를 세 번에 걸쳐 고쳤다.
       각 줄은 같은 곰의 part_id 를 정면 · 옆 · 뒤 · 반대 옆에서 본 것.</p>
     <figure class="media"><img src="assets/bear_parts_try1.jpg" alt="1차 — attention 투표 + DiT 특징 전파" loading="lazy">
       <figcaption><b>1차 · attention 투표 + DiT 특징 전파</b> — 오른팔 안쪽에 머리 라벨이 띠처럼 섞이고 다리에 머리 점이 생겼다.
         cross-attention 은 대응점이 아니라 특징 검색이라 고른 털에서는 머리 · 다리 패치까지 본다. 같은 시선 위의 가려진 복셀도
         앞 픽셀로 투표했고, 전파 반경(토큰 4칸 = 물체 크기의 1/8)이 팔과 몸통 사이 틈을 건너 잡음을 퍼뜨렸다.</figcaption></figure>
     <figure class="media"><img src="assets/bear_parts_try2.jpg" alt="2차 — 입력 카메라 추정 + 보이는 복셀만 투영" loading="lazy">
-      <figcaption><b>2차 · 입력 카메라 추정 + 보이는 복셀만 2D 부위 투영</b> — attention 무게중심으로 카메라를 맞추고 실루엣으로 다듬은 뒤
-        (실루엣 일치 0.30 → 0.89), 사진에 실제로 보이는 복셀만 그 픽셀의 부위를 받게 했다. 앞면은 깨끗해졌지만 가려진 옆 · 뒤는
-        표면을 따라 번지는 전파로 채워서, 라벨이 넓게 잡힌 팔이 몸통 옆과 허벅지까지 먹고 꼬리는 다리가 됐다
-        (사진에서 몸통은 배에만 라벨이 있었다).</figcaption></figure>
+      <figcaption><b>2차 · 입력 카메라 추정 + 보이는 복셀만 2D 부위 투영</b> — 앞면은 깨끗해졌지만, 가려진 옆 · 뒤를 표면을 따라 번지는 전파로
+        채워서 라벨이 넓게 잡힌 팔이 몸통 옆과 허벅지까지 먹고 꼬리는 다리가 됐다 (사진에서 몸통은 배에만 라벨이 있었다).</figcaption></figure>
+    <figure class="media"><img src="assets/bear_sem_camera_fit.jpg" alt="2차에서 추가한 입력 카메라 추정" loading="lazy">
+      <figcaption>2차에서 추가한 입력 카메라 추정 — attention 무게중심으로 카메라를 맞추고 실루엣으로 다듬었다 (실루엣 일치 0.30 → 0.89).
+        왼쪽 2D 부위 (Grounding DINO + SAM) · 가운데 추정 카메라로 그린 '사진에 보이는 복셀' 의 3D 부위 · 오른쪽 실루엣 비교
+        (회색 = 일치 · 빨강 = 복셀만 · 파랑 = 사진만). 보이는 복셀만 그 픽셀의 부위를 받는다.</figcaption></figure>
     <figure class="media"><img src="assets/bear_parts_try3.jpg" alt="3차 — 가려진 쪽은 부피 기준" loading="lazy">
       <figcaption><b>3차 · 가려진 쪽은 '어느 부위의 속(부피)에 붙어 있나' 로</b> — 복셀 껍질을 속이 찬 부피로 채우고, 표면마다 깊이를 따라
         닿는 부위의 속과 부피 안 거리(두꺼운 속은 싸고, 팔 · 몸통이 맞닿은 얇은 목은 비싸게)로 정했다. 등과 꼬리는 배와 같은
         몸통 속에 닿으므로 몸통으로 돌아왔다. 뒷머리 · 목 뒤에는 팔 라벨이 아직 조금 섞인다.</figcaption></figure>
-    <figure class="media"><img src="assets/bear_sem_camera_fit.jpg" alt="2차에서 추가한 입력 카메라 추정" loading="lazy">
-      <figcaption>2차에서 추가한 입력 카메라 추정 — 왼쪽 2D 부위 (Grounding DINO + SAM) · 가운데 추정 카메라로 그린 보이는 복셀의 3D 부위 ·
-        오른쪽 실루엣 비교 (회색 = 일치 · 빨강 = 복셀만 · 파랑 = 사진만)</figcaption></figure>
     <div class="table-wrap"><table class="metrics">
-      <tr><th rowspan="2">부위 정확도<br><small>정답을 아는 합성 곰 · 복셀 단위</small></th><th colspan="2">복셀</th><th colspan="2">부위</th></tr>
-      <tr><th>사진에 보이는</th><th>가려진</th><th>팔</th><th>몸통</th></tr>
-      <tr><td>1차 · attention + 특징 전파</td><td>0.85</td><td>0.73</td><td>0.91</td><td>0.00</td></tr>
-      <tr><td>2차 · + 카메라 추정 · 가시성 투영</td><td><b>0.98</b></td><td>0.77</td><td>0.96</td><td>0.25</td></tr>
-      <tr><td>3차 · + 부피 기준 가려진 쪽</td><td><b>0.98</b></td><td><b>0.85</b></td><td><b>0.98</b></td><td><b>0.48</b></td></tr>
+      <tr><th rowspan="2">부위 분류 정확도<br><small>정답과 같은 부위로 분류된 복셀의 비율<br>높을수록 좋음 · 100% = 전부 맞음</small></th><th colspan="2">표면 위치별</th><th colspan="2">부위별</th></tr>
+      <tr><th>사진에 보이는 면</th><th>가려진 면 (옆 · 뒤)</th><th>팔</th><th>몸통</th></tr>
+      <tr><td>1차 · attention + 특징 전파</td><td>85%</td><td>73%</td><td>91%</td><td>0%</td></tr>
+      <tr><td>2차 · + 카메라 추정 · 보이는 복셀 투영</td><td><b>98%</b></td><td>77%</td><td>96%</td><td>25%</td></tr>
+      <tr><td>3차 · + 가려진 쪽은 부피 기준</td><td><b>98%</b></td><td><b>85%</b></td><td><b>98%</b></td><td><b>48%</b></td></tr>
     </table></div>
-    <p class="note">합성 곰 = 구 · 타원체 · 캡슐로 만든 곰 모양에 부위 정답을 두고, 알려진 카메라로 2D 부위와 잡음 섞인 attention 을 만든 시험
-      (저장소 tests/test_parts_core.py). 실제 곰에는 정답이 없어 그림으로 확인했다 — 몸통으로 분류된 가우시안 11.6% → 15.0% → 25.2%.
-      몸통이 아직 가장 약한 것은 사진에서 몸통 라벨이 배에만 있기 때문으로, 합성 곰에서 옆구리까지 라벨이 있으면 0.48 → 0.82 로 오른다
-      — 다음 단계는 2D 부위 문구 보강.</p>
-    <div class="narrow"><figure class="media"><img src="assets/bear_sem_parts3d_grid.jpg" alt="곰 인형 부위 비교" loading="lazy"><figcaption>곰 인형 — 행: 원래 색 · attention 투표만 · 1차 결과 · 2차의 투영 투표 (사진에 보이는 복셀만, 회색 = 모름) · 3차 최종. 열: 네 방향.</figcaption></figure></div>
+    <p class="note">실제 곰에는 정답 라벨이 없어 정확도를 잴 수 없다. 그래서 부위 정답을 아는 <b>합성 곰</b>(구 · 타원체 · 캡슐로 만든 곰 모양에
+      알려진 카메라로 2D 부위와 잡음 섞인 attention 을 만든 시험, 저장소 tests/test_parts_core.py)의 복셀 8,336개를 정답과 비교했다.
+      실제 곰에서는 몸통으로 분류된 가우시안이 11.6% → 15.0% → 25.2% 로 늘어, 옆 · 뒤가 몸통으로 돌아온 것을 수치로도 확인했다.
+      몸통이 아직 가장 낮은 것은 사진에서 몸통 라벨이 배에만 있어서다 — 합성 곰에서 옆구리까지 라벨이 있으면 48% → 82%.</p>
+
+    <h3>최종 분류 결과 — 두 에셋, 네 방향</h3>
+    <p class="note">행: 원래 색 · attention 투표만 · 1차 결과 · 2차의 투영 투표 (사진에 보이는 복셀만, 회색 = 모름) · 3차 최종.
+      열: 정면 · 옆 · 뒤 · 반대 옆. 두 에셋 모두 같은 방법(3차)으로 분류했다.</p>
+    <div class="row2">
+      {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
+      {img("bear_sem_parts3d_grid.jpg", "곰 인형")}
+    </div>
 
     <div class="callout warn">
       <b>정직한 결과와 다음 단계</b>
