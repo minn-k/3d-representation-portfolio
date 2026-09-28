@@ -9,13 +9,17 @@
 import argparse
 import json
 import os
+import sys
 
 import numpy as np
 import torch
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from transformers import AutoModelForZeroShotObjectDetection, AutoProcessor, SamModel, SamProcessor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from gs_utils import load_font  # noqa: E402
+
 PALETTE = np.array([[255, 255, 255], [230, 76, 64], [64, 140, 230], [77, 191, 89], [242, 191, 51], [166, 102, 217],
                     [51, 204, 204], [242, 128, 179], [140, 140, 140], [120, 80, 40]], np.uint8)
 
@@ -104,7 +108,7 @@ def main():
     ov[alpha] = (0.45 * ov[alpha] + 0.55 * col[alpha]).astype(np.uint8)
     im = Image.fromarray(ov)
     dr = ImageDraw.Draw(im)
-    font = ImageFont.truetype("C:/Windows/Fonts/malgunbd.ttf", 16)
+    font = load_font(16)
     for d in dets:
         b = d["box"]
         dr.rectangle(b, outline=tuple(int(v) for v in PALETTE[d["pid"] % len(PALETTE)]), width=2)

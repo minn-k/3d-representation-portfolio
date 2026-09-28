@@ -18,16 +18,13 @@ import shutil
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from scipy.spatial import cKDTree
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from edit_demo import Cam, render, quat_to_mat, mat_to_quat  # noqa: E402
-try:
-    from edit_demo import RUNTIME  # noqa: E402
-except ImportError:
-    from edit_demo import DEMO as RUNTIME  # noqa: E402
+from edit_demo import RUNTIME, load_font  # noqa: E402
 from prepare_splat import read_ply  # noqa: E402
 from xpbd import XPBD, load_inputs  # noqa: E402
 from semantic_drop import rigid_rms  # noqa: E402
@@ -135,7 +132,7 @@ def main():
 
     offs = [np.array([-args.gap / 2, 0, 0]), np.array([args.gap / 2, 0, 0])]
     cam = Cam(vec(args.eye), vec(args.look), W, H, args.fovy)
-    font = ImageFont.truetype("C:/Windows/Fonts/malgunbd.ttf", 26)
+    font = load_font(26)
     titles = args.titles.split(",")
     frames = []
     total = args.steps + args.settle

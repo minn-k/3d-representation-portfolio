@@ -19,10 +19,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from edit_demo import Cam, render, quat_to_mat, mat_to_quat, label  # noqa: E402
-try:
-    from edit_demo import RUNTIME  # noqa: E402   (저장소 판: APG_RUNTIME_ROOT)
-except ImportError:
-    from edit_demo import DEMO as RUNTIME  # noqa: E402   (로컬 작업 폴더 판)
+from edit_demo import RUNTIME, load_font  # noqa: E402
 from prepare_splat import read_ply  # noqa: E402
 from xpbd import XPBD, load_inputs, world_ground  # noqa: E402
 
@@ -120,8 +117,8 @@ def main():
     frames, curves = [], {m: {n: [] for n in names} for m in MODES}
     titles = ["기하 그래프 · 전체 무름 (%.2g)" % args.base_shape, "기하 그래프 · 전체 단단 (%.2g)" % args.stiff_shape,
               "의미 부위 · 몸 단단 + 팔 무름"]
-    from PIL import Image, ImageDraw, ImageFont
-    font = ImageFont.truetype("C:/Windows/Fonts/malgunbd.ttf", 26)
+    from PIL import Image, ImageDraw
+    font = load_font(26)
     import imageio
     n_frames = int(args.seconds * args.fps)
     spf = max(1, round(60 / args.fps))

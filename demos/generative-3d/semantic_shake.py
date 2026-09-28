@@ -16,17 +16,14 @@ import shutil
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from edit_demo import Cam, render, quat_to_mat, mat_to_quat  # noqa: E402
-try:
-    from edit_demo import RUNTIME  # noqa: E402
-except ImportError:
-    from edit_demo import DEMO as RUNTIME  # noqa: E402
+from edit_demo import RUNTIME, load_font  # noqa: E402
 from prepare_splat import read_ply  # noqa: E402
 from xpbd import XPBD, load_inputs  # noqa: E402
 
@@ -123,7 +120,7 @@ def main():
     ex_src = Rm.T @ np.array([1.0, 0, 0]) / s                   # 월드 x 1 m → 원본 좌표
     offs = [np.array([-args.gap / 2, 0, 0]), np.array([args.gap / 2, 0, 0])]
     cam = Cam(vec(args.eye), vec(args.look), W, H, args.fovy)
-    font = ImageFont.truetype("C:/Windows/Fonts/malgunbd.ttf", 26)
+    font = load_font(26)
     titles = ["기존 그래프 · 온몸 같은 연체", "의미 부위 · 몸체 강체 + 양팔만 연체"]
     frames, wob = [], {m: {n: [] for n in names} for m in ("uniform", "semantic")}
     n_steps = int(args.seconds * 60)
