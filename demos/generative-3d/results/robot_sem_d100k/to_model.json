@@ -1,0 +1,7 @@
+{
+  "source": "out/robot_sem/distill_100k.ply",
+  "total": 100000,
+  "kept": 100000,
+  "min_opacity": 0.02,
+  "keep": 0
+}

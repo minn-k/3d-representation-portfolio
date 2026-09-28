@@ -1,0 +1,35 @@
+{
+  "name": "bear_sem",
+  "image": "C:\\gaussian-splatting\\genai\\out\\bear\\text2img_s3.png",
+  "seed": 1,
+  "gaussians": 794944,
+  "voxels": 24842,
+  "tokens": 4878,
+  "generate_s": 17.0,
+  "recorded_steps": [
+    8,
+    20
+  ],
+  "attn_blocks": [
+    4,
+    8,
+    12,
+    16,
+    20,
+    23
+  ],
+  "feat_blocks": [
+    6,
+    12,
+    18,
+    23
+  ],
+  "attn_calls": {
+    "4": 13,
+    "8": 13,
+    "12": 13,
+    "16": 13,
+    "20": 13,
+    "23": 13
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "bear_sem",
+  "full": 794362,
+  "keep": 100000,
+  "iters": 3000,
+  "seconds": 14.3,
+  "psnr_prune_only": 29.32,
+  "psnr_distilled": 53.92,
+  "psnr_obj_prune_only": 24.48,
+  "psnr_obj_distilled": 49.1,
+  "res": 512
+}
