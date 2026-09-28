@@ -1,0 +1,33 @@
+# demos/generative-3d — Python packages.
+# Install PyTorch first (tested: torch 2.5.1 + CUDA 11.8 on Windows 11, RTX 4070 SUPER 12 GB):
+#   pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu118
+# then:
+#   pip install -r requirements.txt
+# The 3DGS rasterizer (diff_gaussian_rasterization) is built from source — see README.md.
+
+# Core: every script. parts_core.py, lift_parts.py --no-render, part_graph.py (functions), export_parts.py and
+# tests/ need nothing beyond this block (no GPU).
+numpy
+scipy
+pillow
+plyfile
+imageio
+imageio-ffmpeg
+
+# 2D generation (gen2d.py, gen_letters.py) and 2D part segmentation (seg2d.py, dl_seg.py)
+diffusers
+transformers
+accelerate
+huggingface_hub
+
+# TRELLIS Gaussian path (gen3d.py, gen3d_sem.py). Same pins as TRELLIS setup.sh --basic; mesh-only packages
+# (kaolin, nvdiffrast, open3d, xatlas, ...) are not needed with patches/*.patch applied.
+tqdm
+easydict
+rembg
+onnxruntime
+spconv-cu118
+utils3d @ git+https://github.com/EasternJournalist/utils3d.git@9a4eb15e4021b67b12c460c7057d642626897ec8
+
+# tests
+pytest
