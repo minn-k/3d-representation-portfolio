@@ -164,6 +164,7 @@ def run(verbose=True):
         vis = sc["vis"]
         res[mode] = {"vox_acc": _acc(out["vox_part"], sc["gt_v"]),
                      "visible_acc": float(np.mean(out["vox_part"][vis] == sc["gt_v"][vis])),
+                     "hidden_acc": float(np.mean(out["vox_part"][~vis] == sc["gt_v"][~vis])),
                      "arm_acc": _acc(out["vox_part"], sc["gt_v"], 1),
                      "body_acc": _acc(out["vox_part"], sc["gt_v"], 2),
                      "leg_acc": _acc(out["vox_part"], sc["gt_v"], 3),
@@ -185,6 +186,8 @@ def test_projection_lift_beats_attention_only():
     assert res["proj"]["visible_acc"] > 0.95
     assert res["proj"]["vox_acc"] > res["attn"]["vox_acc"] + 0.05
     assert res["proj"]["arm_acc"] > res["attn"]["arm_acc"]
+    assert res["proj"]["hidden_acc"] > res["attn"]["hidden_acc"] + 0.08          # 가려진 쪽 (부피 단계)
+    assert res["proj"]["body_acc"] > res["attn"]["body_acc"] + 0.3
 
 
 if __name__ == "__main__":

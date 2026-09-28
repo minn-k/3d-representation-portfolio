@@ -138,8 +138,8 @@ def main():
     np.savez_compressed(os.path.join(out, "parts3d.npz"), **save)
     json.dump(st, open(os.path.join(out, "parts3d_stats.json"), "w", encoding="utf-8"), indent=2, ensure_ascii=False,
               default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
-    print("[lift]", json.dumps({k: st[k] for k in ("mode", "token_share", "conf_median") if k in st}, ensure_ascii=False),
-          flush=True)
+    print("[lift]", json.dumps({k: st[k] for k in ("mode", "voxel_share", "volumetric", "voxels_cleaned") if k in st},
+                               ensure_ascii=False), flush=True)
 
     if args.no_render:
         return

@@ -14,6 +14,9 @@ mode "proj" (기본):
   4 전파                DiT 특징 유사도를 가중치로 한 26-이웃 토큰 그래프. 보이는 · 순도 높은 토큰은 고정(clamp)
   5 정리                같은 부위의 작은 조각(연결 성분)은 이웃 부위로
   6 복셀 다듬기          보이는 복셀은 자기 투영 라벨을 섞어 경계를 복셀(64³) 해상도로
+  7 가려진 쪽            껍질을 속이 찬 부피로 채우고, 사진에 라벨이 없는 복셀은 '어느 부위의 부피에 속하나' 로:
+                        D(표면까지 거리)를 따라 올라가 닿는 속심이 같은 부위 씨앗과 가까운지 + 부피 안 측지 거리(두꺼운
+                        속은 싸고 얇은 목은 비쌈). 끝으로 복셀 단위 작은 조각 정리
 mode "attn": 예전 방식 그대로 (attention 투표 → 반경 4 토큰 · 특징 k-NN 그래프 전파, 고정 · 정리 없음).
 
 왜 바꿨나 (곰 인형 한쪽 팔이 섞이던 원인):
@@ -415,10 +418,103 @@ def cleanup_fragments(lab, pairs, K, min_size=16, rel=0.25, rounds=3):
     return lab, changed
 
 
+# ------------------------------------------------------------------------------------------ 7 가려진 쪽: 부피
+_OFF26 = np.array([o for o in ((a, b, c) for a in (-1, 0, 1) for b in (-1, 0, 1) for c in (-1, 0, 1)) if o != (0, 0, 0)])
+_FWD = _OFF26[[tuple(o) > (0, 0, 0) for o in _OFF26]]           # 한쪽 13 방향 (간선 중복 없이)
+
+
+def _grid_graph(mask, node_cost=None):
+    """mask 복셀끼리 26-이웃 그래프 → (csr, 노드 번호 격자). 간선 길이 × 두 끝 비용 평균 (없으면 길이만)."""
+    pts = np.argwhere(mask)
+    idx = np.full(mask.shape, -1, np.int64)
+    idx[pts[:, 0], pts[:, 1], pts[:, 2]] = np.arange(len(pts))
+    rows, cols, w = [], [], []
+    for o in _FWD:
+        q = pts + o
+        j = idx[q[:, 0], q[:, 1], q[:, 2]]
+        ok = j >= 0
+        a = np.nonzero(ok)[0]
+        L = np.full(len(a), np.linalg.norm(o))
+        rows.append(a)
+        cols.append(j[ok])
+        w.append(L if node_cost is None else L * 0.5 * (node_cost[a] + node_cost[j[ok]]))
+    G = coo_matrix((np.concatenate(w), (np.concatenate(rows), np.concatenate(cols))), shape=(len(pts),) * 2).tocsr()
+    return G, idx, pts
+
+
+def _multi_source(G, sources_by_part, K, n):
+    from scipy.sparse.csgraph import dijkstra
+    d = np.full((n, K), np.inf)
+    for k in range(K):
+        s = np.unique(sources_by_part[k])
+        if len(s):
+            d[:, k] = dijkstra(G, directed=False, indices=s, min_only=True)
+    return d
+
+
+def volume_part_distances(vox_coords, seeds, K, power=2.0, core_frac=0.55, win=9, pad=2):
+    """가려진 표면 복셀이 어느 부위의 '부피' 에 속하는지 — 보이는 씨앗(표면 복셀 번호, 부위별)에서 두 가지 거리.
+    껍질을 속이 찬 부피 S 로 채우고 D = 표면까지 거리.
+      d_geo   S 안 최단 경로, 비용 (1/D)^power: 두꺼운 속은 싸고 얇은 목(팔 · 몸통이 닿은 곳)은 비싸다
+      d_core  각 복셀이 D 를 따라 올라가 닿는 '속심'(D ≥ core_frac × 주변 최대) 끼리의 거리: 배와 등은 같은 몸통 속심으로,
+              팔 뒤는 팔 속심으로 간다
+    → (d_geo (V,K), d_core (V,K), 통계) · 껍질이 닫혀 있지 않아 채워지지 않으면 None."""
+    c = np.asarray(vox_coords, np.int64) + pad
+    n = VOX_RES + 2 * pad
+    O = np.zeros((n, n, n), bool)
+    O[c[:, 0], c[:, 1], c[:, 2]] = True
+    for ax in range(3):                                         # 격자 면에서 잘린 단면은 막는다 (물체가 격자 끝에 닿을 때)
+        for i in (pad, pad + VOX_RES - 1):
+            sl = [slice(None)] * 3
+            sl[ax] = i
+            O[tuple(sl)] |= ndimage.binary_fill_holes(O[tuple(sl)])
+    for it in (1, 2):                                           # 1~2칸 틈은 메워 본다
+        S = ndimage.binary_fill_holes(ndimage.binary_closing(O, iterations=it) | O)
+        if S.sum() >= 1.15 * O.sum():
+            break
+    else:
+        return None
+    D = ndimage.distance_transform_edt(S)
+    V = len(c)
+    G, idx, _ = _grid_graph(S, 1.0 / np.maximum(D[S], 1.0) ** power)      # D[S] = np.argwhere(S) 순서
+    node = idx[c[:, 0], c[:, 1], c[:, 2]]
+    d_geo = _multi_source(G, [node[s] for s in seeds], K, G.shape[0])[node]
+    core = S & (D >= core_frac * ndimage.maximum_filter(D, size=win)) & (D >= 1.5)
+    P = c.copy()                                                # 가장 가파르게 D 를 올라가 속심에 닿을 때까지
+    for _ in range(2 * VOX_RES):
+        act = np.nonzero(~core[P[:, 0], P[:, 1], P[:, 2]])[0]
+        if not len(act):
+            break
+        Q = P[act][:, None, :] + _OFF26[None]
+        Dn = D[Q[..., 0], Q[..., 1], Q[..., 2]]
+        j = Dn.argmax(1)
+        mv = Dn[np.arange(len(act)), j] > D[P[act, 0], P[act, 1], P[act, 2]]
+        if not mv.any():
+            break
+        P[act[mv]] = Q[np.nonzero(mv)[0], j[mv]]
+    nodes = core.copy()
+    nodes[P[:, 0], P[:, 1], P[:, 2]] = True
+    Gc, idc, _ = _grid_graph(nodes)
+    ent = idc[P[:, 0], P[:, 1], P[:, 2]]
+    d_core = _multi_source(Gc, [ent[s] for s in seeds], K, Gc.shape[0])[ent]
+    return d_geo, d_core, {"solid_voxels": int(S.sum()), "shell_voxels": int(V), "core_voxels": int(core.sum()),
+                           "max_depth_vox": round(float(D.max()), 2)}
+
+
+def soft_nearest(d, tau):
+    """거리 (V,K) → 행마다 softmax(−(d − min)/tau). 모두 inf 인 행은 균등."""
+    p = np.full(d.shape, 1.0 / d.shape[1])
+    ok = np.isfinite(d).any(1)
+    e = np.exp(-(d[ok] - d[ok].min(1, keepdims=True)) / tau)
+    p[ok] = e / e.sum(1, keepdims=True)
+    return p
+
+
 # ------------------------------------------------------------------------------------------ 전체
 def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vox_col=None,
          attn_blocks=(4, 8, 12), feat_blocks=(6, 12), knn=12, alpha=0.9, iters=None, radius=None,
-         erode=2, gate_iou=0.7, gate_color=0.2, clamp_purity=0.75, w_attn_vis=0.25, cleanup=True, vox_refine=0.5, log=print):
+         erode=2, gate_iou=0.7, gate_color=0.2, clamp_purity=0.75, w_attn_vis=0.25, cleanup=True, vox_refine=0.5,
+         geo=0.8, geo_power=2.0, geo_tau=0.3, core_tau=2.0, log=print):
     """→ dict: tok_prob (T,K) · tok_prob_attn · tok_part · vox_prob (V,K) · vox_part · vox_conf · v2t · (proj 이면)
     vox_visible · vox_proj_label · camera, 그리고 stats."""
     K = len(names)
@@ -495,6 +591,30 @@ def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vo
             if vox_refine > 0:
                 vm = lab_v > 0
                 vox_prob[vm] = (1 - vox_refine) * vox_prob[vm] + vox_refine * np.eye(K)[lab_v[vm] - 1]
+            # 6 사진에 라벨이 없는 복셀(가려진 뒤 · 옆, 2D 미분류): 부피 안 측지 거리로 가장 가까운 '보이는 부위' 씨앗
+            #   표면 그래프 전파는 씨앗에서 표면을 따라 번져, 씨앗이 넓은 부위(팔)가 옆 · 뒤 몸통까지 먹는다.
+            #   부피 안 경로는 두꺼운 속을 지나면 싸고 팔 · 몸통이 닿은 얇은 목은 비싸서, 몸통 뒤는 배 쪽 씨앗에 붙는다.
+            if geo > 0:
+                seed_ok = (lab_v > 0) & clamp[v2t] & (tok_part[v2t] == lab_v - 1)
+                seeds = [np.nonzero(seed_ok & (lab_v == k + 1))[0] for k in range(K)]
+                vd = volume_part_distances(sem["slat_coords"], seeds, K, power=geo_power)
+                if vd is None:
+                    log("[parts] shell is not closed -> volumetric step skipped")
+                else:
+                    d_geo, d_core, vst = vd
+                    Pv = soft_nearest(d_core, core_tau) * soft_nearest(d_geo, geo_tau)
+                    Pv /= np.maximum(Pv.sum(1, keepdims=True), 1e-12)
+                    free = lab_v == 0
+                    before = vox_prob[free].argmax(1)
+                    vox_prob[free] = (1 - geo) * vox_prob[free] + geo * Pv[free]
+                    st["volumetric"] = {**vst, "seeds": {n: int(len(seeds[k])) for k, n in enumerate(names)},
+                                        "voxels_changed": int((vox_prob[free].argmax(1) != before).sum()),
+                                        "weight": geo, "power": geo_power}
+            if cleanup:                                             # 복셀 단위 작은 조각 (투영 · 부피 단계의 점 잡음)
+                vpairs = cKDTree(sem["slat_coords"].astype(np.float32)).query_pairs(r=1.8, output_type="ndarray")
+                vlab, vch = cleanup_fragments(vox_prob.argmax(1), vpairs, K, min_size=48)
+                vox_prob[vch] = 0.4 * vox_prob[vch] + 0.6 * np.eye(K)[vlab[vch]]
+                st["voxels_cleaned"] = int(vch.sum())
             out.update({"vox_visible": vis, "vox_proj_label": (lab_v - 1).astype(np.int8)})
             st.update({"visible_voxels": float(vis.mean()), "visible_labeled_voxels": float(m.mean()),
                        "tokens_with_projection": float(has.mean()), "tokens_clamped": float(clamp.mean()),
@@ -503,7 +623,8 @@ def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vo
     vox_part = vox_prob.argmax(1)
     out.update({"tok_prob": Y.astype(np.float32), "tok_part": tok_part, "vox_prob": vox_prob.astype(np.float32),
                 "vox_part": vox_part, "vox_conf": vox_prob.max(1).astype(np.float32)})
-    st.update({"token_share": {n: float(np.mean(tok_part == k)) for k, n in enumerate(names)},
+    st.update({"voxel_share": {n: float(np.mean(vox_part == k)) for k, n in enumerate(names)},
+               "token_share": {n: float(np.mean(tok_part == k)) for k, n in enumerate(names)},
                "changed_vs_attention": float(np.mean(S_attn.argmax(1) != tok_part)),
                "conf_median": float(np.median(Y.max(1)))})
     return out, st

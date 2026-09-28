@@ -54,6 +54,7 @@ overlapping masks go to the smaller mask. `lift_parts.py` moves those names onto
 | Camera | affine fit token centres → attention centroids (Huber IRLS), refined on the silhouette with a footprint-aware Chamfer cost; gated by silhouette IoU ≥ 0.7 and colour correlation ≥ 0.2 | none |
 | Propagation | touching tokens (26-neighbourhood), DiT-feature weights, visible confident tokens clamped, 120 its | radius 4 tokens, top-12 feature neighbours, 40 its |
 | Cleanup | small same-part fragments take their neighbours' part; visible voxels sharpened to 64³ | none |
+| Hidden side | shell filled into a solid; each unlabeled voxel climbs the depth field to a part core and takes the seeds' part that shares the core and is reached through thick interior (thin necks are costly); voxel-level fragment cleanup | none |
 
 Gaussian `i` → voxel `i // 32`; the re-fit asset takes the nearest voxel. `parts3d.npz` keeps the field names used by
 the other scripts (`asset_part`, `asset_conf`, `asset_prob`, `gs_part_full`) and adds per-voxel labels.
@@ -68,16 +69,21 @@ the other scripts (`asset_part`, `asset_conf`, `asset_prob`, `gs_part_full`) and
    features are nearly identical, so noise spread along the inner arm.
 4. 13.6% of the bear's object pixels had no 2D label (flanks, chest).
 
-The projection version answers 1–3 directly: visible voxels read their own pixel, and hidden ones are filled from
-clamped visible neighbours. On a synthetic teddy bear with known parts (`tests/test_parts_core.py`):
+The projection version answers 1–3 directly: visible voxels read their own pixel. The first real run on the bear
+fixed the front, but surface propagation from the visible seeds let the arm spread over the hidden sides and back of
+the body. The arm's seeds are wide, while the body's are only the belly. The hidden side is therefore now decided by
+volume: the back of the body belongs to the same interior as the belly, not to the arm pressed against it. On a
+synthetic teddy bear with known parts (`tests/test_parts_core.py`):
 
-| | visible voxels | hidden voxels | arm | all voxels |
-|---|---|---|---|---|
-| attention-only | 0.849 | 0.730 | 0.914 | 0.766 |
-| projection + clamped propagation | **0.976** | **0.766** | **0.964** | **0.830** |
+| | visible voxels | hidden voxels | arm | body | all voxels |
+|---|---|---|---|---|---|
+| attention-only | 0.849 | 0.730 | 0.914 | 0.003 | 0.766 |
+| projection + clamped propagation | 0.975 | 0.766 | 0.964 | 0.247 | 0.829 |
+| + volumetric hidden side | **0.977** | **0.846** | **0.984** | **0.484** | **0.886** |
 
-The camera is recovered to 0.7 px (silhouette IoU 0.991). Hidden-side accuracy is bounded by what attention says
-about unseen surfaces; the real assets need a re-run (`lift_parts.py`, then check `camera_fit.png`).
+The camera is recovered to 0.7 px (silhouette IoU 0.991). The body is still the weakest because only the belly is
+labeled in 2D; with its visible sides labeled as well, the hidden body reaches about 0.82. Check `camera_fit.png` after
+each run.
 
 ### Using the labels
 
