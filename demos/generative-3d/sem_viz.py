@@ -10,32 +10,12 @@ import os
 import sys
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from edit_demo import Cam, render, quat_to_mat, mat_to_quat  # noqa: E402
-from plyfile import PlyData  # noqa: E402
-
-SH_C0 = 0.28209479177387814
-T_SAVE = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]], float)     # TRELLIS save_ply: PLY = T · 내부
-N_PATCH = 37
-
-
-def load_gs(out):
-    v = PlyData.read(os.path.join(out, "gaussian.ply"))["vertex"].data
-    P = np.stack([v["x"], v["y"], v["z"]], 1).astype(np.float64) @ T_SAVE      # 행벡터: 내부 = Tᵀ·PLY
-    q = np.stack([v[f"rot_{i}"] for i in range(4)], 1).astype(np.float64)
-    q = mat_to_quat(T_SAVE.T[None] @ quat_to_mat(q / np.linalg.norm(q, axis=1, keepdims=True)))
-    S = np.exp(np.stack([v[f"scale_{i}"] for i in range(3)], 1))
-    op = 1 / (1 + np.exp(-v["opacity"].astype(np.float64)))
-    col = np.clip(SH_C0 * np.stack([v[f"f_dc_{i}"] for i in range(3)], 1) + 0.5, 0, 1)
-    return P, q, S, op, col
-
-
-def vox_to_tok(sem):
-    tk = {tuple(c): i for i, c in enumerate(sem["tok_coords"].astype(int))}
-    return np.array([tk[tuple(c // 2)] for c in sem["slat_coords"].astype(int)])
+from gs_utils import SH_C0, T_SAVE, load_font, load_gs  # noqa: E402,F401
+from parts_core import N_PATCH, kmeans, vox_to_tok  # noqa: E402,F401
 
 
 def patch_attn(sem, blocks):
@@ -53,15 +33,6 @@ def pca_rgb(F, k=3):
     return np.clip((Y - lo) / np.maximum(hi - lo, 1e-9), 0, 1)
 
 
-def kmeans(X, k, iters=30, seed=0):
-    rng = np.random.default_rng(seed)
-    C = X[rng.choice(len(X), k, replace=False)]
-    for _ in range(iters):
-        lab = np.argmin(((X[:, None] - C[None]) ** 2).sum(-1), 1)
-        C = np.stack([X[lab == j].mean(0) if np.any(lab == j) else C[j] for j in range(k)])
-    return lab
-
-
 PALETTE = np.array([[0.90, 0.30, 0.25], [0.25, 0.55, 0.90], [0.30, 0.75, 0.35], [0.95, 0.75, 0.20],
                     [0.65, 0.40, 0.85], [0.20, 0.80, 0.80], [0.95, 0.50, 0.70], [0.55, 0.55, 0.55]])
 
@@ -71,6 +42,7 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--k", type=int, default=6)
     args = ap.parse_args()
+    from edit_demo import Cam, render                            # CUDA 래스터라이저 (그릴 때만)
     out = os.path.join(HERE, "out", args.name)
     sem = dict(np.load(os.path.join(out, "sem.npz")))
     P, q, S, op, col = load_gs(out)
@@ -93,7 +65,7 @@ def main():
     size = np.linalg.norm(P.max(0) - P.min(0))
     cams = [Cam(c + 1.3 * size * np.array([np.cos(a), np.sin(a), 0.3]), c, 256, 256, 35)
             for a in np.radians([-90, 0, 90, 180])]
-    font = ImageFont.truetype("C:/Windows/Fonts/malgunbd.ttf", 16)
+    font = load_font(16)
     tiles = []
     for name, cc in rows:
         r = np.concatenate([render(cm, P, q, S, op, cc) for cm in cams], 1)

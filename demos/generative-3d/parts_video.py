@@ -10,12 +10,12 @@ import sys
 
 import imageio
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from sem_viz import load_gs  # noqa: E402
-from lift_parts import PART_COLORS  # noqa: E402
+from gs_utils import load_font, load_gs  # noqa: E402
+from parts_core import PART_COLORS  # noqa: E402
 from edit_demo import Cam, render  # noqa: E402
 
 
@@ -33,7 +33,7 @@ def main():
     pcol = PART_COLORS[1 + pz["gs_part_full"].astype(int)]
     c = P.mean(0)
     size = np.linalg.norm(P.max(0) - P.min(0))
-    font = ImageFont.truetype("C:/Windows/Fonts/malgunbd.ttf", 18)
+    font = load_font(18)
     frames = []
     for i in range(args.frames):
         a = math.radians(args.start_deg + 360.0 * i / args.frames)

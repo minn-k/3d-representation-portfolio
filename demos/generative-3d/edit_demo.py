@@ -20,44 +20,16 @@ import numpy as np
 import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from gs_utils import SH_C0, load_font, mat_to_quat, quat_to_mat, runtime_root  # noqa: E402,F401  (다른 스크립트가 여기서 가져간다)
+
 ROOT = os.environ.get("APG_ROOT", os.path.dirname(HERE))       # 3DGS 작업 폴더 (output_1/, apg_runtime/, SIBR_viewers/)
-RUNTIME = os.environ.get("APG_RUNTIME_ROOT", os.path.join(ROOT, "apg_runtime"))   # APG-GS 준비 스크립트 · XPBD DLL
+RUNTIME = runtime_root()                                        # APG-GS 준비 스크립트 · XPBD DLL (APG_RUNTIME_ROOT)
 sys.path.insert(0, RUNTIME)
 from prepare_splat import read_ply  # noqa: E402
 from xpbd import XPBD, load_inputs  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer  # noqa: E402
-
-SH_C0 = 0.28209479177387814
-
-
-def quat_to_mat(q):  # w,x,y,z (N,4) -> (N,3,3)
-    w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
-    return np.stack([
-        1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y),
-        2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x),
-        2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)], axis=1).reshape(-1, 3, 3)
-
-
-def mat_to_quat(R):  # (N,3,3) -> w,x,y,z
-    t = R[:, 0, 0] + R[:, 1, 1] + R[:, 2, 2]
-    q = np.zeros((len(R), 4))
-    m = t > 0
-    s = np.sqrt(np.maximum(t[m] + 1, 1e-12)) * 2
-    q[m] = np.stack([0.25 * s, (R[m, 2, 1] - R[m, 1, 2]) / s, (R[m, 0, 2] - R[m, 2, 0]) / s,
-                     (R[m, 1, 0] - R[m, 0, 1]) / s], 1)
-    for i, (a, b, c) in enumerate(((0, 1, 2), (1, 2, 0), (2, 0, 1))):
-        mm = (~m) & (R[:, a, a] >= R[:, b, b]) & (R[:, a, a] >= R[:, c, c])
-        m |= mm
-        s = np.sqrt(np.maximum(1 + R[mm, a, a] - R[mm, b, b] - R[mm, c, c], 1e-12)) * 2
-        qq = np.zeros((mm.sum(), 4))
-        qq[:, 0] = (R[mm, c, b] - R[mm, b, c]) / s
-        qq[:, 1 + a] = 0.25 * s
-        qq[:, 1 + b] = (R[mm, b, a] + R[mm, a, b]) / s
-        qq[:, 1 + c] = (R[mm, c, a] + R[mm, a, c]) / s
-        q[mm] = qq
-    return q / np.linalg.norm(q, axis=1, keepdims=True)
-
 
 class Cam:
     def __init__(self, eye, at, W, H, fovy_deg):
@@ -97,13 +69,10 @@ def render(cam, pos, quat, scale, opacity, color, bg=(1.0, 1.0, 1.0)):
 
 
 def label(img, text):
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
     im = Image.fromarray(img)
     dr = ImageDraw.Draw(im)
-    try:
-        font = ImageFont.truetype("C:/Windows/Fonts/malgunbd.ttf", max(22, img.shape[0] // 17))
-    except OSError:
-        font = ImageFont.load_default()
+    font = load_font(max(22, img.shape[0] // 17))
     dr.text((16, 12), text, fill=(30, 30, 30), font=font)
     return np.asarray(im)
 
@@ -132,6 +101,8 @@ def main():
     ap.add_argument("--cross-keep", type=float, default=1.0,
                     help="부위 경계를 넘는 간선 중 남길 비율 (1 = 기하 그래프 그대로). 형상·부피 클러스터도 이 연결로 만들어진다")
     ap.add_argument("--conf", type=float, default=0.5, help="이 신뢰도 이상인 가우시안끼리만 경계 판정")
+    ap.add_argument("--joint", default="random", choices=["random", "overlap"],
+                    help="남길 경계 간선 고르기: random (포트폴리오 수치) · overlap (부위 쌍마다 Bhattacharyya 겹침이 가장 큰 것)")
     ap.add_argument("--dist-compliance", type=float, default=0.0,
                     help="거리 제약 compliance. 0 이면 완전 강체라 간선 강성(--cross-scale)이 효과가 없다 (α̃ = compliance/강성/dt²)")
     ap.add_argument("--tag", default="", help="출력 파일 이름 꼬리표")
@@ -147,18 +118,16 @@ def main():
     inp = load_inputs(d, args.name)
     part_st = {}
     if args.parts:
+        from part_graph import apply_part_graph
         pz = np.load(args.parts)
         pa, pc = pz["asset_part"].astype(int), pz["asset_conf"]
         pnames = [str(n) for n in pz["names"]]
-        e0, e1 = inp["edges"][:, 0], inp["edges"][:, 1]
-        cross = (pa[e0] != pa[e1]) & (pc[e0] > args.conf) & (pc[e1] > args.conf)
-        inp["stiff"] = np.ascontiguousarray((inp["stiff"] * np.where(cross, args.cross_scale, 1.0)).astype(np.float32))
-        keep = ~cross | (np.random.default_rng(0).random(len(cross)) < args.cross_keep)   # 경계 간선 솎기 (관절만 남김)
-        for k_ in ("edges", "rest", "stiff"):
-            inp[k_] = np.ascontiguousarray(inp[k_][keep])
-        part_st = {"cross_part_edge_ratio": float(cross.mean()), "cross_scale": args.cross_scale, "conf": args.conf,
-                   "cross_keep": args.cross_keep, "edges_after": int(keep.sum())}
-        print(f"[edit] parts {pnames}: cross-part edges {cross.mean():.2%} -> stiffness x{args.cross_scale}", flush=True)
+        if len(pa) != len(inp["pos"]):
+            raise SystemExit(f"parts3d 의 에셋({len(pa):,})이 {args.name}({len(inp['pos']):,})와 다르다 — "
+                             "lift_parts.py --asset 을 이 에셋으로 다시 돌릴 것")
+        inp, part_st = apply_part_graph(inp, pa, pc, args.conf, args.cross_scale, args.cross_keep, args.joint)   # 관절만 남김
+        print(f"[edit] parts {pnames}: cross-part edges {part_st['cross_part_edge_ratio']:.2%} -> stiffness "
+              f"x{args.cross_scale}, keep {args.cross_keep:.0%} ({args.joint})", flush=True)
     _, data = read_ply(os.path.join(d, f"{args.name}_crop.ply"))
     color = np.clip(SH_C0 * np.stack([data["f_dc_0"], data["f_dc_1"], data["f_dc_2"]], 1) + 0.5, 0, 1)
     xf = json.load(open(os.path.join(d, f"{args.name}_transform.json"), encoding="utf-8"))

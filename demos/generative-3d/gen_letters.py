@@ -20,8 +20,12 @@ PROMPT = ("isometric 3D render of the capital letter {L} built from a wooden gar
           "single object, centered, plain white background, soft studio lighting, high detail")
 
 
+LETTER_FONTS = ("C:/Windows/Fonts/arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                "/Library/Fonts/Arial Bold.ttf")
+
+
 def letter_init(L, size=512):
-    font = ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", 380)
+    font = ImageFont.truetype(next(p for p in LETTER_FONTS if os.path.exists(p)), 380)
     mask = Image.new("L", (size, size), 0)
     d = ImageDraw.Draw(mask)
     bb = d.textbbox((0, 0), L, font=font)
