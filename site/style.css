@@ -119,7 +119,7 @@ th small { font-weight: 400; }
 .asset header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin-bottom: 12px; }
 .asset h4 { margin: 0; }
 .prompt { font-size: 14px; color: var(--ink2); background: var(--bg); padding: 2px 8px; border-radius: 6px; }
-.asset-grid { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; align-items: start; }
+.asset-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; align-items: start; }
 .asset-note { margin: 10px 0 0; color: var(--ink3); font-size: 14px; }
 
 figure.media { margin: 0; }
@@ -152,8 +152,7 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--i
   .cards3, .steps3, .row3 { grid-template-columns: 1fr; }
   .pipe, .timeline { grid-template-columns: 1fr; }
   .pipe li:not(:last-child)::after { content: "↓"; right: 50%; top: auto; bottom: -10px; transform: translate(50%, 50%); }
-  .asset-grid { grid-template-columns: 1fr 1fr; }
-  .asset-grid > figure:last-child { grid-column: 1 / -1; }
+  .asset-grid { grid-template-columns: 1fr 1fr 1fr; }
   .row2 { grid-template-columns: 1fr; }
   .links { display: none; }
   .hero { padding-top: 40px; }

@@ -1,0 +1,42 @@
+{
+  "asset": "gen_robot_sem_d100k",
+  "part": "arm",
+  "side": "+x",
+  "angle_deg": -60.0,
+  "pivot_world": [
+    0.0438,
+    0.0314,
+    0.1827
+  ],
+  "joint_points": 101,
+  "arm_gaussians": 8631,
+  "tip_grab": 906,
+  "pinned": 25849,
+  "dist_compliance": 0.0001,
+  "geometry": {
+    "arm_shape_error_cm": 0.523,
+    "arm_rotation_deg_achieved": 60.4,
+    "disp_cm": {
+      "head": 0.027,
+      "antenna": 0.009,
+      "arm": 0.026,
+      "torso": 0.148,
+      "leg": 0.195
+    },
+    "edges_over_2x": 1.0382792805139898e-06,
+    "edges_over_1p5x": 4.153117122055959e-06
+  },
+  "semantic": {
+    "arm_shape_error_cm": 0.0,
+    "arm_rotation_deg_achieved": 57.1,
+    "disp_cm": {
+      "head": 0.176,
+      "antenna": 0.119,
+      "arm": 0.184,
+      "torso": 0.6,
+      "leg": 0.515
+    },
+    "edges_over_2x": 6.0220198269811406e-05,
+    "edges_over_1p5x": 0.0003457470004111586
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "asset": "gen_robot_sem_d100k",
+  "parts": [
+    "head",
+    "antenna",
+    "arm",
+    "torso",
+    "leg"
+  ],
+  "modes": [
+    "geometry_soft",
+    "geometry_stiff",
+    "semantic"
+  ],
+  "rigid": "head,torso,leg",
+  "soft": "arm,antenna",
+  "base_shape": 0.3,
+  "stiff_shape": 1.0,
+  "soft_fit": 0.05,
+  "rigid_shape": 1.0,
+  "soft_shape": 0.02,
+  "drop_m": 0.3,
+  "tilt_deg": 15.0,
+  "gravity": 9.81,
+  "restitution": 0.4,
+  "seconds": 4.0,
+  "part_counts": {
+    "head": 34972,
+    "antenna": 3,
+    "arm": 21017,
+    "torso": 17990,
+    "leg": 25591
+  },
+  "max_shape_error_cm": {
+    "geometry_soft": {
+      "head": 2.373,
+      "arm": 2.212,
+      "torso": 2.215,
+      "leg": 3.126
+    },
+    "geometry_stiff": {
+      "head": 1.724,
+      "arm": 1.209,
+      "torso": 0.614,
+      "leg": 2.751
+    },
+    "semantic": {
+      "head": 1.695,
+      "arm": 3.733,
+      "torso": 0.751,
+      "leg": 2.578
+    }
+  },
+  "final_shape_error_cm": {
+    "geometry_soft": {
+      "head": 1.578,
+      "arm": 1.751,
+      "torso": 1.417,
+      "leg": 1.176
+    },
+    "geometry_stiff": {
+      "head": 0.745,
+      "arm": 1.003,
+      "torso": 0.585,
+      "leg": 0.484
+    },
+    "semantic": {
+      "head": 0.883,
+      "arm": 3.423,
+      "torso": 0.715,
+      "leg": 0.564
+    }
+  }
+}
