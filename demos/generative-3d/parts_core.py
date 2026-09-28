@@ -8,8 +8,8 @@
 
 mode "proj" (기본):
   1 attention 투표      S_attn = 앞쪽 블록의 상대 cross-attention · 패치별 부위 비율
-  2 입력 카메라 추정     토큰 중심 → attention 무게중심으로 affine 카메라를 맞춘 뒤(IRLS), 물체 실루엣(Chamfer)으로
-                        약원근/원근 카메라를 다듬는다 (실루엣 IoU 로 품질 확인)
+  2 입력 카메라 추정     토큰 중심 → attention 무게중심 affine 카메라(IRLS) + 방위 · 고도 · 원근 전역 탐색 후보들을 물체
+                        실루엣(발자국 Chamfer)으로 다듬고, 실루엣 IoU + 색 상관이 가장 높은 것 (색이 앞 · 뒤를 가른다)
   3 투영 투표            복셀을 z-buffer 로 그려 '입력 사진에 보이는' 복셀만 그 픽셀의 2D 부위(경계 침식)를 받는다
   4 전파                DiT 특징 유사도를 가중치로 한 26-이웃 토큰 그래프. 보이는 · 순도 높은 토큰은 고정(clamp)
   5 정리                같은 부위의 작은 조각(연결 성분)은 이웃 부위로
@@ -249,24 +249,47 @@ def iou(a, b):
     return float((a & b).sum() / max((a | b).sum(), 1))
 
 
-def refine_camera(cam0, Xv, alpha, X_att=None, u_att=None, w_att=None, lam=0.01, margin=0.6, seed=0):
-    """물체 실루엣에 맞춰 카메라 다듬기 (Powell, κ 시작값 0 · 0.3 두 번).
-    복셀 '중심' 이 아니라 반지름 r = margin·(복셀 한 칸의 투영 크기) 의 '발자국' 이 실루엣과 맞도록:
+class SilhouetteCost:
+    """카메라가 물체 실루엣과 얼마나 안 맞나 (픽셀). 복셀 '중심' 이 아니라 반지름 r = margin·(복셀 한 칸의 투영 크기) 의
+    '발자국' 이 실루엣과 맞도록:
       안쪽 항  복셀 중심이 실루엣을 r 만큼 침식한 영역 안에 있어야 한다 (밖 거리 + 모자란 안쪽 여유)
       바깥 항  실루엣 경계 픽셀마다 가장 가까운 복셀 중심까지 거리 − r (넘는 만큼만)
-    중심끼리만 맞추면 경계 픽셀이 늘 반 칸쯤 떨어져 있어 카메라가 부풀려진다 (합성 시험에서 IoU 0.95 → 0.88).
-    lam·(attention 무게중심 잔차, Huber) 는 대칭인 해 사이의 선택만 돕도록 작게 둔다 (무게중심은 가운데로 쏠려 있다)."""
-    rng = np.random.default_rng(seed)
+    중심끼리만 맞추면 경계 픽셀이 늘 반 칸쯤 떨어져 있어 카메라가 부풀려진다 (합성 시험에서 IoU 0.95 → 0.88)."""
+
+    def __init__(self, alpha, margin=0.6, n_bnd=4000, seed=0):
+        rng = np.random.default_rng(seed)
+        H, W = alpha.shape
+        self.pad = pad = max(H, W) // 2
+        big = np.zeros((H + 2 * pad, W + 2 * pad), bool)
+        big[pad:pad + H, pad:pad + W] = alpha
+        self.dt_out = ndimage.distance_transform_edt(~big)
+        self.dt_in = ndimage.distance_transform_edt(big)
+        by, bx = np.nonzero(alpha & ~ndimage.binary_erosion(alpha))
+        bnd = np.stack([bx, by], 1).astype(np.float64)
+        self.bnd = bnd[rng.choice(len(bnd), n_bnd, replace=False)] if len(bnd) > n_bnd else bnd
+        ys, xs = np.nonzero(alpha)
+        self.center = np.array([xs.mean(), ys.mean()])
+        self.radius = float(np.sqrt(((xs - xs.mean()) ** 2 + (ys - ys.mean()) ** 2).mean()))
+        self.margin = margin
+
+    def __call__(self, cam, X):
+        u, _, den = cam.project(X)
+        if not np.all(np.isfinite(u)):
+            return 1e9
+        r = self.margin * cam.s / VOX_RES / den
+        at = [u[:, 1] + self.pad, u[:, 0] + self.pad]
+        f = (ndimage.map_coordinates(self.dt_out, at, order=1, mode="nearest")
+             + np.maximum(r - ndimage.map_coordinates(self.dt_in, at, order=1, mode="nearest"), 0)).mean()
+        d, j = cKDTree(u).query(self.bnd)
+        return float(f + np.maximum(d - r[j], 0).mean())
+
+
+def refine_camera(cam0, Xv, alpha, X_att=None, u_att=None, w_att=None, lam=0.01, margin=0.6, seed=0, sil=None,
+                  kappa_starts=(0.0, 0.3), kappa_max=0.7, maxfev=6000):
+    """실루엣에 맞춰 카메라 다듬기 (Powell). lam·(attention 무게중심 잔차, Huber) 는 대칭인 해 사이의 선택만 돕도록 작게
+    둔다 (무게중심은 가운데로 쏠려 있다). κ ≤ kappa_max: TRELLIS 학습 시점의 화각 10~70° 에 해당하는 범위."""
+    sil = sil or SilhouetteCost(alpha, margin, seed=seed)
     H, W = alpha.shape
-    pad = max(H, W) // 2
-    big = np.zeros((H + 2 * pad, W + 2 * pad), bool)
-    big[pad:pad + H, pad:pad + W] = alpha
-    dt_out = ndimage.distance_transform_edt(~big)
-    dt_in = ndimage.distance_transform_edt(big)
-    by, bx = np.nonzero(alpha & ~ndimage.binary_erosion(alpha))
-    bnd = np.stack([bx, by], 1).astype(np.float64)
-    if len(bnd) > 4000:
-        bnd = bnd[rng.choice(len(bnd), 4000, replace=False)]
     use_att = X_att is not None and lam > 0 and len(X_att) > 0
     if use_att:
         wa = w_att / w_att.sum()
@@ -274,31 +297,78 @@ def refine_camera(cam0, Xv, alpha, X_att=None, u_att=None, w_att=None, lam=0.01,
 
     def cost(th):
         cam = cam0.perturbed(th)
-        u, _, den = cam.project(Xv)
-        if not np.all(np.isfinite(u)):
-            return 1e9
-        r = margin * cam.s / VOX_RES / den
-        at = [u[:, 1] + pad, u[:, 0] + pad]
-        f = (ndimage.map_coordinates(dt_out, at, order=1, mode="nearest")
-             + np.maximum(r - ndimage.map_coordinates(dt_in, at, order=1, mode="nearest"), 0)).mean()
-        d, j = cKDTree(u).query(bnd)
-        f += np.maximum(d - r[j], 0).mean()
-        if use_att:
+        f = sil(cam, Xv)
+        if use_att and f < 1e8:
             ua, _, _ = cam.project(X_att)
             r = np.linalg.norm(ua - u_att, axis=1)
             f += lam * float(wa @ np.where(r < d_h, 0.5 * r * r / d_h, r - 0.5 * d_h))
         return float(f)
 
-    bounds = [(-0.6, 0.6)] * 3 + [(-0.8, 0.8), (-2.0, 2.0), (-2.0, 2.0), (0.0, 0.9)]
+    bounds = [(-0.6, 0.6)] * 3 + [(-0.8, 0.8), (-2.0, 2.0), (-2.0, 2.0), (0.0, kappa_max)]
     best = None
-    for k0 in (0.0, 0.3):
+    for k0 in kappa_starts:
         th0 = np.zeros(7)
-        th0[6] = k0
+        th0[6] = min(max(k0, 0.0), kappa_max)
         res = minimize(cost, th0, method="Powell", bounds=bounds,
-                       options={"xtol": 1e-4, "ftol": 1e-7, "maxfev": 6000})
+                       options={"xtol": 1e-4, "ftol": 1e-7, "maxfev": maxfev})
         if best is None or res.fun < best[1]:
             best = (cam0.perturbed(res.x), float(res.fun))
     return best
+
+
+def look_rotation(az, el):
+    """물체를 보는 카메라 회전 (내부 좌표 z 위, 굴림 0). az: z 축 둘레 [rad], el: 내려다보는 각 [rad]."""
+    f = np.array([np.sin(az) * np.cos(el), np.cos(az) * np.cos(el), -np.sin(el)])
+    r1 = np.cross(f, [0.0, 0.0, 1.0])
+    r1 /= np.linalg.norm(r1)
+    return np.stack([r1, np.cross(f, r1), f])
+
+
+def search_cameras(Xv, sil, n_az=24, els_deg=(-10, 5, 20, 35, 50), kappas=(0.25, 0.5), n_sub=4000, top=6, seed=0):
+    """attention 시작점이 틀렸을 때를 위한 전역 탐색: 방위 × 고도 × 원근 격자마다 실루엣 중심 · 크기를 맞춘 카메라를
+    만들어 실루엣 비용이 가장 낮은 top 개 → [(비용, 카메라, (방위°, 고도°, κ))]."""
+    rng = np.random.default_rng(seed)
+    Xs = Xv[rng.choice(len(Xv), min(n_sub, len(Xv)), replace=False)]
+    x0 = Xv.mean(0)
+    out = []
+    for az in np.arange(n_az) * 2 * np.pi / n_az:
+        for el in np.radians(els_deg):
+            R = look_rotation(az, el)
+            for kp in kappas:
+                u, _, _ = Camera(R, 1.0, (0.0, 0.0), kp, x0).project(Xs)
+                m = u.mean(0)
+                sc = 1.1 * sil.radius / max(float(np.sqrt(((u - m) ** 2).sum(1).mean())), 1e-9)   # 껍질 투영은 가장자리가 짙다
+                cam = Camera(R, sc, sil.center - sc * m, kp, x0)
+                out.append((sil(cam, Xs), cam, (round(float(np.degrees(az))), round(float(np.degrees(el))), kp)))
+    out.sort(key=lambda t: t[0])
+    return out[:top]
+
+
+def estimate_camera(Xv, alpha, cam_att, att=None, vox_col=None, cond_rgb=None, color_w=0.5, n_sub=4000, seed=0,
+                    log=print):
+    """입력 사진의 카메라: attention affine 시작점 + 전역 탐색 후보들을 (복셀 일부로) 다듬고, 실루엣 IoU + color_w·색 상관이
+    가장 높은 것을 모든 복셀로 한 번 더 다듬는다. 색 상관은 실루엣이 같은 앞 · 뒤(좌우 반전)를 가른다.
+    → (카메라, 통계)."""
+    rng = np.random.default_rng(seed)
+    Xs = Xv[rng.choice(len(Xv), min(n_sub, len(Xv)), replace=False)]
+    sil = SilhouetteCost(alpha, seed=seed)
+    att = att or (None, None, None)
+    starts = [("attention", cam_att, (0.0, 0.3))]
+    starts += [(f"search az{a} el{e} k{k}", c, (k,)) for _, c, (a, e, k) in search_cameras(Xv, sil, seed=seed)]
+    tried = []
+    for name, c0, ks in starts:
+        cam, _ = refine_camera(c0, Xs, alpha, *att, sil=sil, kappa_starts=ks, maxfev=1500)
+        fp, u, _, vis = render_voxels(cam, Xv, alpha.shape)
+        ci = color_agreement(vox_col, cond_rgb, u, vis) if vox_col is not None and cond_rgb is not None else 0.0
+        tried.append({"start": name, "iou": round(iou(fp, alpha), 4), "color_corr": round(ci, 4),
+                      "score": iou(fp, alpha) + color_w * max(ci, 0.0), "cam": cam})
+    tried.sort(key=lambda t: -t["score"])
+    best = tried[0]
+    cam, cost = refine_camera(best["cam"], Xv, alpha, *att, sil=sil, kappa_starts=(best["cam"].kappa,))
+    log("[parts] camera starts: " + " | ".join(f"{t['start']}: IoU {t['iou']:.3f} colour {t['color_corr']:.2f}"
+                                               for t in tried[:4]))
+    return cam, {"chosen_start": best["start"], "fit_cost": round(cost, 3),
+                 "starts": [{k: v for k, v in t.items() if k not in ("cam", "score")} for t in tried]}
 
 
 # ------------------------------------------------------------------------------------------ 3 투영 투표
@@ -547,14 +617,14 @@ def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vo
         A, b, _ = fit_affine(Xt[ok], u_att[ok], w0[ok])
         cam0 = Camera.from_affine(A, b, Xv.mean(0))
         fp0, *_ = render_voxels(cam0, Xv, alpha_mask.shape)
-        cam, cost = refine_camera(cam0, Xv, alpha_mask, Xt[ok], u_att[ok], w0[ok])
+        cam, cst = estimate_camera(Xv, alpha_mask, cam0, (Xt[ok], u_att[ok], w0[ok]), vox_col, cond_rgb, log=log)
         fp, u, z, vis = render_voxels(cam, Xv, alpha_mask.shape)
         st["camera"] = {**cam.as_dict(), "silhouette_iou_affine_init": round(iou(fp0, alpha_mask), 4),
-                        "silhouette_iou": round(iou(fp, alpha_mask), 4), "fit_cost": round(cost, 3)}
+                        "silhouette_iou": round(iou(fp, alpha_mask), 4), **cst}
         if vox_col is not None and cond_rgb is not None:
             st["camera"]["color_corr_visible"] = round(color_agreement(vox_col, cond_rgb, u, vis), 4)
-        log(f"[parts] camera: silhouette IoU {st['camera']['silhouette_iou_affine_init']:.3f} (affine) -> "
-            f"{st['camera']['silhouette_iou']:.3f} (refined), kappa {cam.kappa:.3f}"
+        log(f"[parts] camera: silhouette IoU {st['camera']['silhouette_iou_affine_init']:.3f} (attention affine) -> "
+            f"{st['camera']['silhouette_iou']:.3f} ({st['camera']['chosen_start']}, refined), kappa {cam.kappa:.3f}"
             + (f", colour corr {st['camera']['color_corr_visible']:.3f}" if "color_corr_visible" in st["camera"] else ""))
         out["camera"] = cam
         bad_color = st["camera"].get("color_corr_visible", 1.0) < gate_color

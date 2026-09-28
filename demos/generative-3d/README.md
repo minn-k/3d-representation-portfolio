@@ -51,7 +51,7 @@ overlapping masks go to the smaller mask. `lift_parts.py` moves those names onto
 | Step | `--mode proj` (default) | `--mode attn` (earlier, reproducible) |
 |---|---|---|
 | Evidence | attention vote + **camera estimate + visibility-aware projection** of the 2D label map | attention vote |
-| Camera | affine fit token centres → attention centroids (Huber IRLS), refined on the silhouette with a footprint-aware Chamfer cost; gated by silhouette IoU ≥ 0.7 and colour correlation ≥ 0.2 | none |
+| Camera | starts: affine fit token centres → attention centroids (Huber IRLS) and a global azimuth × elevation × perspective search; each refined on the silhouette with a footprint-aware Chamfer cost; kept by silhouette IoU + colour correlation; gated by IoU ≥ 0.7 and colour ≥ 0.2 | none |
 | Propagation | touching tokens (26-neighbourhood), DiT-feature weights, visible confident tokens clamped, 120 its | radius 4 tokens, top-12 feature neighbours, 40 its |
 | Cleanup | small same-part fragments take their neighbours' part; visible voxels sharpened to 64³ | none |
 | Hidden side | shell filled into a solid; each unlabeled voxel climbs the depth field to a part core and takes the seeds' part that shares the core and is reached through thick interior (thin necks are costly); voxel-level fragment cleanup | none |
@@ -89,6 +89,11 @@ On the real bear (`results/bear_sem/parts3d_stats_try1.json`, `_try2.json`, `par
 reaches silhouette IoU 0.894 (0.298 from attention alone) with colour correlation 0.41. The share of Gaussians labeled
 body goes from 11.6% (1st) to 15.0% (2nd) to 25.2% (3rd) as the hidden sides and back return to the body. There is no
 ground truth, so the part turntables are the check. A little arm label remains on the back of the head.
+
+On the robot, the camera started from the attention alone got stuck (silhouette IoU 0.69, colour 0.08), so the labels
+fell back to the 1st method; the robot results in the portfolio are that 1st-method labeling. The global search was
+added for this case. On the synthetic bear it recovers the camera to 0.7 px even when the attention is replaced by
+noise, but the robot has not been re-run with it.
 
 ### Using the labels
 

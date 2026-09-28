@@ -243,8 +243,9 @@ A decoder then turns each voxel into 32 Gaussians, stored in voxel order. `gen3d
 `lift_parts.py` (method in `parts_core.py`) then:
 
 1. Votes 2D part fractions through the early-block attention.
-2. Estimates the camera of the input image: an affine fit from token centres to attention centroids, refined
-   against the object silhouette.
+2. Estimates the camera of the input image. Starting points are an affine fit from token centres to attention
+   centroids and a global search over viewing directions. Each is refined against the object silhouette, and the one
+   with the best silhouette overlap and colour agreement is kept (colour tells front from back).
 3. Z-buffers the voxels, so that only voxels visible in the input image take the 2D part at their pixel. Part
    boundaries are eroded by a few pixels.
 4. Propagates labels on a graph of touching tokens weighted by DiT-feature similarity, with confidently labeled

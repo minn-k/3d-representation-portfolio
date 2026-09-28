@@ -151,7 +151,7 @@
     <p class="sub">원본 3DGS 의 가우시안은 자기가 머리인지 팔인지 모른다 — 색을 맞춘 결과일 뿐이다. TRELLIS 는 3D 복셀을 만들 때
       <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>와 <b>부위 구조가 담긴 중간 특징(DiT)</b>을 거친다. 이 신호를 생성 도중에 꺼내고
       입력 사진의 카메라를 추정해, 사진에 보이는 곳은 사진의 부위 이름을, 가려진 곳은 부피를 따라 3D 로 옮겼다. 결과: <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (PLY 속성으로 내보냄 ·
-      로봇 10만 개 = 머리 34,972 · 팔 21,017 · 몸통 17,990 · 다리 25,591).</p>
+      로봇 10만 개 (1차 방법) = 머리 34,972 · 팔 21,017 · 몸통 17,990 · 다리 25,591).</p>
     <ol class="pipe">
       <li><span class="tag gen">2D</span><b>입력 이미지의 부위 이름</b><small>Grounding DINO + SAM</small></li>
       <li><span class="tag mine">생성 중간</span><b>attention 투표</b><small>SLat 트랜스포머 블록 4·8·12 · 토큰 → 이미지 패치</small></li>
@@ -160,7 +160,7 @@
       <li><span class="tag mine">결과</span><b>part_id → 부위별 물성</b><small>가우시안 i → 복셀 i//32 · 강체 + 연체 XPBD</small></li>
     </ol>
     <div class="row2">
-      <figure class="media"><video src="assets/robot_sem_parts.mp4" poster="assets/robot_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>안내 로봇 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (뒷면 포함, 입력 사진에 없던 쪽)</figcaption></figure>
+      <figure class="media"><video src="assets/robot_sem_parts.mp4" poster="assets/robot_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>안내 로봇 (1차 방법) — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (뒷면 포함, 입력 사진에 없던 쪽)</figcaption></figure>
       <figure class="media"><video src="assets/bear_sem_parts.mp4" poster="assets/bear_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>곰 인형 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (아래 시행착오의 3차 결과)</figcaption></figure>
     </div>
 
@@ -211,8 +211,12 @@
       몸통이 아직 가장 낮은 것은 사진에서 몸통 라벨이 배에만 있어서다 — 합성 곰에서 옆구리까지 라벨이 있으면 48% → 82%.</p>
 
     <h3>최종 분류 결과 — 두 에셋, 네 방향</h3>
-    <p class="note">행: 원래 색 · attention 투표만 · 1차 결과 · 2차의 투영 투표 (사진에 보이는 복셀만, 회색 = 모름) · 3차 최종.
-      열: 정면 · 옆 · 뒤 · 반대 옆. 두 에셋 모두 같은 방법(3차)으로 분류했다.</p>
+    <p class="note">열: 정면 · 옆 · 뒤 · 반대 옆.
+      <b>곰 인형은 3차 방법</b>의 결과다. 행: 원래 색 · attention 투표만 · 1차 결과 · 2차의 투영 투표 (사진에 보이는 복셀만,
+      회색 = 모름) · 3차 최종.
+      <b>안내 로봇은 1차 방법</b>의 결과다. attention 만으로 잡은 입력 카메라가 어긋나 (실루엣 일치 0.69) 안전장치가 1차 방식으로
+      되돌렸다. 그 뒤 카메라를 여러 방향에서 찾도록 고쳤고 합성 곰에서는 attention 없이도 카메라를 찾지만, 로봇은 아직 다시 돌리지 않았다.
+      로봇의 행: 원래 색 · attention 투표만 · 1차 결과 · 기준선 두 가지 (DiT 특징 k-means · 좌표 k-means — 부위 이름이 없고 부위를 가로질러 자른다).</p>
     <div class="row2">
       <figure class="media"><img src="assets/robot_sem_parts3d_grid.jpg" alt="안내 로봇" loading="lazy"><figcaption>안내 로봇</figcaption></figure>
       <figure class="media"><img src="assets/bear_sem_parts3d_grid.jpg" alt="곰 인형" loading="lazy"><figcaption>곰 인형</figcaption></figure>
