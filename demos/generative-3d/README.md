@@ -102,7 +102,8 @@ ground truth, so the part turntables are the check. A little arm label remains o
 - **Part-level posing** (`semantic_pose.py`). "The right arm" is selected by name, the shoulder joint is found where
   arm and torso Gaussians touch, and the whole arm is rotated about it (60°). XPBD moves the rest.
 - **Per-part materials** (`semantic_shake.py`). Gaussians that are not arm move rigidly with the shaken base; the arms
-  are a soft XPBD body.
+  are a soft XPBD body whose rest pose is lowered 30° about the shoulder (`--droop-deg`), so they hang a little and
+  swing while keeping their shape. Gravity is not used: with this solver it stretches the soft arms into poles.
 - **Export** (`export_parts.py`). `part_id` as a PLY property, raw bytes and JSON, plus SIBR model folders coloured by
   part or with chosen parts hidden. The SIBR viewer has no per-part toggles or per-part physics UI yet.
 
