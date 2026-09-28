@@ -101,9 +101,12 @@ ground truth, so the part turntables are the check. A little arm label remains o
   smallest Bhattacharyya distance). `--materials` scales stiffness per part.
 - **Part-level posing** (`semantic_pose.py`). "The right arm" is selected by name, the shoulder joint is found where
   arm and torso Gaussians touch, and the whole arm is rotated about it (60°). XPBD moves the rest.
-- **Per-part materials** (`semantic_shake.py`). Gaussians that are not arm move rigidly with the shaken base; the arms
-  are a soft XPBD body whose rest pose is lowered 30° about the shoulder (`--droop-deg`), so they hang a little and
-  swing while keeping their shape. Gravity is not used: with this solver it stretches the soft arms into poles.
+- **Per-part materials** (`semantic_shake.py`). Only the arm beyond the elbow (forearm and hand) is a soft XPBD
+  body; the upper arm, shoulder and everything else move rigidly with the shaken base. The elbow is found from the
+  arm's shape: the arm is ordered by distance along its graph from the shoulder, and the elbow is where it bends
+  farthest from the shoulder–fingertip line (`--elbow` sets it by hand). The forearm rests lowered 30° about the
+  elbow (`--droop-deg`), so it hangs a little and swings while keeping its shape. Gravity is not used: with this
+  solver it stretches the soft arms into poles.
 - **Export** (`export_parts.py`). `part_id` as a PLY property, raw bytes and JSON, plus SIBR model folders coloured by
   part or with chosen parts hidden. The SIBR viewer has no per-part toggles or per-part physics UI yet.
 

@@ -199,7 +199,7 @@ python export_parts.py --asset gen_bear_sem_d100k --parts out/bear_sem/parts3d.n
 python part_graph.py  --asset gen_bear_sem_d100k --parts out/bear_sem/parts3d.npz --cross-keep 0.1 --joint overlap
 python edit_demo.py   --name gen_bear_sem_d100k --parts out/bear_sem/parts3d.npz --cross-keep 0.1 --grab-part arm ...
 python semantic_pose.py  --asset gen_robot_sem_d100k --parts out/robot_sem/parts3d.npz    # lift "the right arm" at the shoulder
-python semantic_shake.py --asset gen_robot_sem_d100k --parts out/robot_sem/parts3d.npz    # rigid body + soft, lowered arms
+python semantic_shake.py --asset gen_robot_sem_d100k --parts out/robot_sem/parts3d.npz    # soft forearms + hands, the rest rigid
 ```
 
 - `export_parts.py` writes `<asset>_parts.ply` (all 3DGS properties + `part_id`, `part_conf`), `<asset>_part_id.u8`
