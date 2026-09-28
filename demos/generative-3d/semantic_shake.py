@@ -5,18 +5,19 @@
 발(아래 --pin-h)을 받침에 고정하고 받침을 좌우로 --shake-s 동안 흔든 뒤 멈춘다. 같은 그래프 · 같은 솔버.
 물성 = 거리 간선의 강성 (α̃ = compliance / 강성 / dt² — 전역 compliance 가 0 이면 강성이 무효라 켠다)
      + 물체 단위 형상 유지.
-의미 쪽은 팔 가운데 팔꿈치 너머(아래팔 + 손)만 XPBD 로 풀고, 위팔 · 어깨를 포함한 나머지는 받침과 함께 강체로
-움직인다. 팔꿈치는 part_id 로 고른 팔의 모양에서 찾는다 (--elbow, find_arms). 아래팔의 쉬는 자세는 팔꿈치 둘레로
---droop-deg 만큼 내린 자세. 형상 유지가 이 자세로 되돌리므로 아래팔 · 손은 모양을 지킨 채 조금 내려와 덜렁거린다.
+의미 쪽은 팔꿈치에서 손끝까지만 무르고 나머지는 받침과 함께 강체로 움직인다. 모양은 그대로 두고 물성만 바꾼다.
+팔은 part_id 로 고르고, 팔꿈치는 그 팔의 모양에서 찾는다 (--elbow, find_arms). 무른 정도 w 는 팔꿈치 앞뒤
+(--elbow-blend) 에서 0 → 1 로 매끄럽게 올라가고, 간선 강성은 1 → --soft-stiff 로 이어진다 (w = 0 인 위팔 · 어깨만 강체에
+붙인다). 강체와 무른 부분이 한 줄에서 딱 끊기면 그 경계만 늘어나 잘린 것처럼 보인다.
 중력은 쓰지 않는다: 이 솔버에서 중력은 무른 팔을 기둥처럼 늘인다.
 부위는 lift_parts.py 가 생성 과정의 신호로 가우시안마다 붙인 part_id.
 지표: 부위별 흔들림 = 받침 이동을 뺀, 쉬는 자세에서 벗어난 거리의 시간 RMS (cm). 출력 out/semantic_shake/<tag>.mp4 · .json
 
-기본값이 그 영상이다. 자른 곳은 로그의 "elbow at …" 줄과 _mid.png 로 확인하고, 어긋나면 --elbow 에 어깨 0 → 손끝 1
-사이 비율을 준다 (클수록 손 쪽에서 자른다).
-아래팔을 더 · 덜 내리려면 --droop-deg (0 = 원래 자세), 덜렁임을 키우려면 --semantic-shape 를 낮춘다 (0.04 정도까지).
+기본값이 그 영상이다. 무른 부분이 시작하는 곳은 로그의 "elbow at …" 줄로 확인하고, 어긋나면 --elbow 에
+어깨 0 → 손끝 1 사이 비율을 준다 (클수록 손 쪽부터 무르다).
+덜렁임을 키우려면 --semantic-shape 를 낮춘다 (0.04 정도까지).
 페이지의 예전 영상(robot_b, 팔 전체가 무름)은
-  semantic_shake.py --tag robot_b --elbow 0 --droop-deg 0 --semantic-shape 0.08 --shake-s 1.6 --seconds 4
+  semantic_shake.py --tag robot_b --elbow 0 --semantic-shape 0.08 --shake-s 1.6 --seconds 4
 """
 import argparse
 import json
@@ -47,12 +48,13 @@ def _seg_dist(X, A, B):
     return np.linalg.norm(X - (A + t[:, None] * AB), axis=1)
 
 
-def find_arms(Wr, arm, body, edges, elbow="auto", touch_r=0.012, bins=24):
-    """좌 · 우 팔마다 어깨 S · 팔꿈치 E · 손끝 T 를 찾고, 팔꿈치 너머(아래팔 + 손)를 고른다.
+def find_arms(Wr, arm, body, edges, elbow="auto", blend=0.25, touch_r=0.012, bins=24):
+    """좌 · 우 팔마다 어깨 S · 팔꿈치 E · 손끝 T 를 찾고, 팔 가우시안마다 무른 정도 w (0 = 강체, 1 = 무름) 를 준다.
     S = 몸통에 닿은 팔 가우시안 중 가장 바깥쪽 (semantic_pose.py 와 같은 방법). 어깨에서 팔 그래프를 따라 잰 거리로
     팔을 줄 세우고, T = 가장 먼 5% 의 중심. E = S–T 직선에서 가장 먼 3% 의 중심 (elbow="auto", 어깨→손끝의
     15~75% 사이, |ST| 의 15% 넘게 꺾였을 때. 곧은 팔이면 45% 지점). 숫자를 주면 그 비율 지점.
-    아래팔 + 손 = 선분 E–T 가 선분 S–E 보다 가까운 가우시안 (팔꿈치 안쪽에서 두 토막이 맞닿아도 섞이지 않는다)."""
+    팔 위치 u = 꺾은선 S–E–T 위 가장 가까운 점까지의 길이 비율 (0 = 어깨, 1 = 손끝; 팔꿈치 안쪽에서 두 토막이 맞닿아도
+    섞이지 않는다). w 는 u 가 팔꿈치 ± blend/2 를 지나며 0 → 1 로 매끄럽게 오른다."""
     bc = Wr[body].mean(0)
     tree = cKDTree(Wr[body])
     e = np.unique(np.sort(edges.astype(np.int64), 1), axis=0)
@@ -99,67 +101,23 @@ def find_arms(Wr, arm, body, edges, elbow="auto", touch_r=0.012, bins=24):
         else:
             target = float(elbow)
         if E is None and target <= 0:                            # 팔 전체를 무르게
-            E, lower = S, np.ones(len(idx), bool)
+            E, w = S, np.ones(len(idx))
         else:
             if E is None:
                 E = C[np.nonzero(valid)[0][np.argmin(np.abs(fr[valid] - target))]]
-            lower = _seg_dist(X, E, T) < _seg_dist(X, S, E)
+            L1, L2 = np.linalg.norm(E - S), np.linalg.norm(T - E)
+            t1 = np.clip(((X - S) @ (E - S)) / max(L1 * L1, 1e-12), 0, 1)
+            t2 = np.clip(((X - E) @ (T - E)) / max(L2 * L2, 1e-12), 0, 1)
+            u = np.where(_seg_dist(X, S, E) <= _seg_dist(X, E, T), t1 * L1, L1 + t2 * L2) / max(L1 + L2, 1e-12)
+            f = np.clip((u - (L1 / max(L1 + L2, 1e-12) - blend / 2)) / max(blend, 1e-6), 0, 1)
+            w = f * f * (3 - 2 * f)
         u, v = S - E, T - E
         bend = 180.0 - math.degrees(math.acos(np.clip(u @ v / (np.linalg.norm(u) * np.linalg.norm(v) + 1e-12), -1, 1)))
         _, ne = cKDTree(X).query(E, min(20, len(X)))
-        arms.append({"side": "+x" if side > 0 else "-x", "idx": idx, "lower": lower,
+        arms.append({"side": "+x" if side > 0 else "-x", "idx": idx, "w": w,
                      "elbow_frac": round(float(np.median(d[ne]) / dmax), 3), "bend_deg": round(bend, 1),
                      "shoulder": S, "elbow": E, "tip": T})
     return arms
-
-
-def droop_forearms(inp, Wr, arms, deg, blend, s, Rm, tw):
-    """아래팔 + 손을 팔꿈치 둘레로 아래(-z 월드)를 향해 deg 만큼 돌린 자세를 쉬는 자세로 한 inp 복사본.
-    위팔 · 어깨는 그대로. 팔꿈치에서 팔꿈치→손끝 길이의 blend 배까지는 덜 돌려 팔꿈치를 굽힌다. 수직을 넘지 않는다.
-    pos · rots · rest 를 같이 바꾼다."""
-    out = {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in inp.items()}
-    Wn = Wr.copy()
-    Rw = np.tile(np.eye(3), (len(Wr), 1, 1))
-    moved = np.zeros(len(Wr), bool)
-    down = np.array([0.0, 0.0, -1.0])
-    for a in arms:
-        a["droop_deg"] = 0.0
-        idx = a["idx"][a["lower"]]
-        if deg <= 0 or len(idx) < 10:
-            continue
-        piv = a["elbow"]
-        u = Wr[idx].mean(0) - piv
-        k = np.cross(u, down)
-        if np.linalg.norm(k) < 0.1 * np.linalg.norm(u):          # 거의 수직이면 바깥쪽으로 내린다
-            k = np.cross([1.0 if a["side"] == "+x" else -1.0, 0, 0], down)
-        k /= np.linalg.norm(k)
-        to_down = math.degrees(math.acos(np.clip(u @ down / np.linalg.norm(u), -1, 1)))
-        th = math.radians(min(deg, max(to_down - 10.0, 0.0)))
-        ET = a["tip"] - piv
-        f = np.clip(((Wr[idx] - piv) @ ET) / max(blend * (ET @ ET), 1e-12), 0, 1)   # 팔꿈치→손끝 방향 위치
-        ang = th * f * f * (3 - 2 * f)                           # 팔꿈치 0 → 아래팔 대부분 th
-        K = np.array([[0, -k[2], k[1]], [k[2], 0, -k[0]], [-k[1], k[0], 0]])
-        R = np.eye(3)[None] + np.sin(ang)[:, None, None] * K[None] + (1 - np.cos(ang))[:, None, None] * (K @ K)[None]
-        Wn[idx] = piv + np.einsum("nij,nj->ni", R, Wr[idx] - piv)
-        Rw[idx] = R
-        moved[idx] = True
-        a["droop_deg"] = round(math.degrees(th), 1)
-    if not moved.any():
-        return out
-    idx = np.nonzero(moved)[0]
-    out["pos"] = np.ascontiguousarray((((Wn - tw) / s) @ Rm).astype(inp["pos"].dtype))
-    q = inp["rots"][idx].astype(np.float64)
-    Rs = Rm.T[None] @ Rw[idx] @ Rm[None]                       # 월드 회전 → 원본 좌표
-    rots = out["rots"]
-    rots[idx] = mat_to_quat(Rs @ quat_to_mat(q / np.linalg.norm(q, axis=1, keepdims=True))).astype(rots.dtype)
-    e = inp["edges"]
-    hit = moved[e[:, 0]] | moved[e[:, 1]]
-    P0, P1 = inp["pos"].astype(np.float64), out["pos"].astype(np.float64)
-    d0 = np.linalg.norm(P0[e[hit, 0]] - P0[e[hit, 1]], axis=1)
-    d1 = np.linalg.norm(P1[e[hit, 0]] - P1[e[hit, 1]], axis=1)
-    rest = out["rest"]
-    rest[hit] = (rest[hit] * np.where(d0 > 1e-12, d1 / np.maximum(d0, 1e-12), 1.0)).astype(rest.dtype)
-    return out
 
 
 def main():
@@ -177,8 +135,8 @@ def main():
     ap.add_argument("--rigid-body", type=int, default=1, help="의미 쪽: 단단한 부위를 강체로 (받침과 함께 움직임), 무른 부위만 XPBD")
     ap.add_argument("--elbow", default="auto",
                     help="무른 쪽이 시작하는 곳: auto (팔이 가장 꺾인 곳) 또는 어깨→손끝 (팔을 따라 잰) 거리의 비율 (0 = 팔 전체)")
-    ap.add_argument("--droop-deg", type=float, default=30.0, help="의미 쪽 아래팔을 팔꿈치 둘레로 내린 쉬는 자세 [deg] (0 = 원래 자세)")
-    ap.add_argument("--droop-blend", type=float, default=0.2, help="팔꿈치에서 팔꿈치→손끝 길이의 이 비율까지는 덜 돌려 팔꿈치를 굽힌다")
+    ap.add_argument("--elbow-blend", type=float, default=0.25,
+                    help="팔꿈치 앞뒤로 강체 → 무름이 이어지는 폭 (어깨→손끝 길이의 비율)")
     ap.add_argument("--body", default="torso", help="어깨를 찾을 이웃 부위")
     ap.add_argument("--pin-h", type=float, default=0.33, help="받침에 붙이는 높이 (다리)")
     ap.add_argument("--amp", type=float, default=0.04, help="흔들기 폭 [m]")
@@ -223,32 +181,31 @@ def main():
     body = ~arm
     if args.body in names:
         body &= (pa == names.index(args.body)) & (pc > args.conf)
-    # 무른 쪽 = 팔꿈치 너머 (아래팔 + 손). 위팔 · 어깨는 몸체와 함께 강체
-    arms = find_arms(Wr, arm, body, e, "auto" if args.elbow == "auto" else float(args.elbow))
-    soft = np.zeros(len(Wr), bool)
+    # 무른 정도: 팔꿈치 앞뒤에서 0 → 1 (위팔 · 어깨 0, 아래팔 · 손 1). 몸체는 0
+    arms = find_arms(Wr, arm, body, e, "auto" if args.elbow == "auto" else float(args.elbow), args.elbow_blend)
+    wsoft = np.zeros(len(Wr))
     for a in arms:
-        soft[a["idx"][a["lower"]]] = True
-    inp_sem = droop_forearms(inp0, Wr, arms, args.droop_deg, args.droop_blend, s, Rm, tw)
+        wsoft[a["idx"]] = a["w"]
+    soft = wsoft >= 0.5                                               # 지표용 '무른 팔' = 팔꿈치 너머
     z = Wr[:, 2]
     pin = np.where(z < z.min() + args.pin_h * np.ptp(z))[0].astype(np.int32)
-    body_rigid = np.where(~soft)[0].astype(np.int32)                  # 의미 쪽 강체 = 아래팔 · 손이 아닌 모든 가우시안
-    print(f"[shake] {args.soft} {arm.sum():,} / {len(Wr):,} Gaussians in {len(keep_lab)} pieces | soft (elbow to fingertips) "
-          f"{soft.sum():,} | pinned {len(pin):,}", flush=True)
+    body_rigid = np.where(wsoft <= 0)[0].astype(np.int32)              # 의미 쪽 강체 = 조금이라도 무른 가우시안을 뺀 전부
+    print(f"[shake] {args.soft} {arm.sum():,} / {len(Wr):,} Gaussians in {len(keep_lab)} pieces | free {int((wsoft > 0).sum()):,}, "
+          f"soft beyond the elbow {int(soft.sum()):,} | pinned {len(pin):,}", flush=True)
     for a in arms:
         print(f"[shake] arm {a['side']}: {len(a['idx']):,} Gaussians, elbow at {a['elbow_frac']:.0%} of shoulder->fingertip "
-              f"(bend {a['bend_deg']} deg), soft {int(a['lower'].sum()):,}, forearm lowered {a['droop_deg']} deg", flush=True)
+              f"(bend {a['bend_deg']} deg), free {int((a['w'] > 0).sum()):,}, soft {int((a['w'] >= 0.5).sum()):,}", flush=True)
 
     src = max([os.path.join(RUNTIME, "xpbd_dll", n) for n in ("xpbd_isaac.dll", "xpbd_isaac_next.dll")
                if os.path.exists(os.path.join(RUNTIME, "xpbd_dll", n))], key=os.path.getmtime)
     sims = []
     for k, mode in enumerate(("uniform", "semantic")):
-        inp = {kk: (v.copy() if isinstance(v, np.ndarray) else v) for kk, v in (inp0 if mode == "uniform" else inp_sem).items()}
+        inp = {kk: (v.copy() if isinstance(v, np.ndarray) else v) for kk, v in inp0.items()}
         if mode == "uniform":
             inp["stiff"] = np.ascontiguousarray((inp["stiff"] * args.uniform_stiff).astype(np.float32))
         else:
-            either_soft = soft[e[:, 0]] | soft[e[:, 1]]
-            inp["stiff"] = np.ascontiguousarray((inp["stiff"] * np.where(either_soft, args.soft_stiff, 1.0))
-                                                .astype(np.float32))
+            we = 0.5 * (wsoft[e[:, 0]] + wsoft[e[:, 1]])              # 강성 1 → soft_stiff 로 이어진다
+            inp["stiff"] = np.ascontiguousarray((inp["stiff"] * args.soft_stiff ** we).astype(np.float32))
         dll = os.path.join(out, f"xpbd_{k}.dll")
         if not os.path.exists(dll) or os.path.getmtime(dll) < os.path.getmtime(src):
             shutil.copy2(src, dll)
@@ -264,7 +221,7 @@ def main():
         sim.reset()
         sims.append(sim)
 
-    P0s = {"uniform": inp0["pos"].astype(np.float64), "semantic": inp_sem["pos"].astype(np.float64)}   # 쉬는 자세
+    P0 = inp0["pos"].astype(np.float64)
     ex_src = Rm.T @ np.array([1.0, 0, 0]) / s                   # 월드 x 1 m → 원본 좌표
     offs = [np.array([-args.gap / 2, 0, 0]), np.array([args.gap / 2, 0, 0])]
     cam = Cam(vec(args.eye), vec(args.look), W, H, args.fovy)
@@ -280,13 +237,13 @@ def main():
         base = amp * ex_src
         for sim, mode in zip(sims, ("uniform", "semantic")):
             ids = body_rigid if (mode == "semantic" and args.rigid_body) else pin
-            sim.set_attached(ids, np.ascontiguousarray((P0s[mode][ids] + base).astype(np.float32)), 1.0)
+            sim.set_attached(ids, np.ascontiguousarray((P0[ids] + base).astype(np.float32)), 1.0)
             sim.step()
         if k % 2 == 0:
             Ps, Qs, Ss, Os, Cs = [], [], [], [], []
             for sim, off, mode in zip(sims, offs, ("uniform", "semantic")):
                 P = sim.positions().astype(np.float64)
-                dev = np.linalg.norm(P - (P0s[mode] + base), axis=1) * s * 100   # 받침을 따라간 이동을 뺀 흔들림
+                dev = np.linalg.norm(P - (P0 + base), axis=1) * s * 100   # 받침을 따라간 이동을 뺀 흔들림
                 for kk, n in enumerate(names):
                     mm = (pa == kk) if n not in args.soft.split(",") else soft
                     if mm.sum() > 50:
@@ -312,10 +269,10 @@ def main():
     rms = {m: {n: round(float(np.sqrt(np.mean(np.square(v)))), 3) for n, v in c.items() if v} for m, c in wob.items()}
     peak = {m: {n: round(float(np.max(v)), 3) for n, v in c.items() if v} for m, c in wob.items()}
     st = {k_: getattr(args, k_) for k_ in ("asset", "elbow", "compliance", "soft_stiff", "uniform_stiff", "uniform_shape",
-                                            "semantic_shape", "rigid_body", "droop_deg", "droop_blend", "pin_h", "amp",
+                                            "semantic_shape", "rigid_body", "elbow_blend", "pin_h", "amp",
                                             "freq", "shake_s", "seconds", "damping")}
-    arms_st = [{"side": a["side"], "gaussians": int(len(a["idx"])), "soft_gaussians": int(a["lower"].sum()),
-                "elbow_frac": a["elbow_frac"], "bend_deg": a["bend_deg"], "forearm_droop_deg": a["droop_deg"],
+    arms_st = [{"side": a["side"], "gaussians": int(len(a["idx"])), "free_gaussians": int((a["w"] > 0).sum()),
+                "soft_gaussians": int((a["w"] >= 0.5).sum()), "elbow_frac": a["elbow_frac"], "bend_deg": a["bend_deg"],
                 "shoulder_world": np.round(a["shoulder"], 4).tolist(), "elbow_world": np.round(a["elbow"], 4).tolist()}
                for a in arms]
     st.update({"soft": f"{args.soft} beyond the elbow", "arm_gaussians": int(arm.sum()), "soft_gaussians": int(soft.sum()),
