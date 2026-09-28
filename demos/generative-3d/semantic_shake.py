@@ -1,10 +1,11 @@
 """흔들기 시험 — 왼쪽: 기존 그래프 · 온몸 같은 물성 / 오른쪽: 의미 부위로 물성 배정 (양팔만 무름, 몸통 · 머리 · 다리 단단).
 
-  C:\\anaconda\\anaconda3\\envs\\trellis\\python.exe semantic_shake.py
+  C:\\anaconda\\anaconda3\\envs\\trellis\\python.exe semantic_shake.py          (기본값 = 포트폴리오 영상 robot_b)
 
 발(아래 --pin-h)을 받침에 고정하고 받침을 좌우로 --shake-s 동안 흔든 뒤 멈춘다. 같은 그래프 · 같은 솔버.
 물성 = 거리 간선의 강성 (α̃ = compliance / 강성 / dt² — 전역 compliance 가 0 이면 강성이 무효라 켠다)
-     + 물체 단위 형상 유지 (의미 쪽: 몸체 가우시안만 강체 맞춤에 참여 · 팔은 형상 유지 0).
+     + 물체 단위 형상 유지.
+의미 쪽은 part_id 가 팔이 아닌 가우시안(몸통 · 머리 · 다리)을 받침에 강체로 붙이고, 팔만 XPBD 연체로 푼다.
 부위는 lift_parts.py 가 생성 과정의 신호로 가우시안마다 붙인 part_id.
 지표: 부위별 흔들림 = 받침 이동을 뺀 변위의 시간 RMS (cm). 출력 out/semantic_shake/<tag>.mp4 · .json
 """
@@ -36,11 +37,11 @@ def main():
     ap.add_argument("--parts", default=os.path.join(HERE, "out", "robot_sem", "parts3d.npz"))
     ap.add_argument("--soft", default="arm", help="무르게 할 부위")
     ap.add_argument("--conf", type=float, default=0.3)
-    ap.add_argument("--compliance", type=float, default=1e-4, help="거리 제약 전역 compliance")
-    ap.add_argument("--soft-stiff", type=float, default=0.02, help="의미 쪽 무른 부위(팔) 간선 강성 배율")
-    ap.add_argument("--uniform-stiff", type=float, default=0.15, help="기존 그래프 쪽 온몸 간선 강성 배율 (찢어지지 않을 만큼 무름)")
+    ap.add_argument("--compliance", type=float, default=5e-5, help="거리 제약 전역 compliance")
+    ap.add_argument("--soft-stiff", type=float, default=0.2, help="의미 쪽 무른 부위(팔) 간선 강성 배율")
+    ap.add_argument("--uniform-stiff", type=float, default=0.3, help="기존 그래프 쪽 온몸 간선 강성 배율 (찢어지지 않을 만큼 무름)")
     ap.add_argument("--uniform-shape", type=float, default=0.1, help="기존 그래프 쪽 물체 형상 유지 (온몸이 한 덩어리 젤리로)")
-    ap.add_argument("--semantic-shape", type=float, default=0.05, help="의미 쪽 물체 형상 유지 (강체 몸체가 기준 → 팔이 스프링처럼 돌아온다)")
+    ap.add_argument("--semantic-shape", type=float, default=0.08, help="의미 쪽 물체 형상 유지 (강체 몸체가 기준 → 팔이 스프링처럼 돌아온다)")
     ap.add_argument("--rigid-body", type=int, default=1, help="의미 쪽: 단단한 부위를 강체로 (받침과 함께 움직임), 무른 부위만 XPBD")
     ap.add_argument("--pin-h", type=float, default=0.33, help="받침에 붙이는 높이 (다리)")
     ap.add_argument("--amp", type=float, default=0.04, help="흔들기 폭 [m]")
@@ -54,7 +55,7 @@ def main():
     ap.add_argument("--eye", default="0,-1.1,0.34")
     ap.add_argument("--look", default="0,0,0.15")
     ap.add_argument("--fovy", type=float, default=27)
-    ap.add_argument("--tag", default="robot")
+    ap.add_argument("--tag", default="robot_b")
     args = ap.parse_args()
     vec = lambda t: np.array([float(v) for v in t.split(",")])  # noqa: E731
     W, H = (int(v) for v in args.res.split("x"))
