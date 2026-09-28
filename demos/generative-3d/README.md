@@ -38,3 +38,9 @@ where arm and torso Gaussians touch, and the whole arm is rotated about it (60°
 baseline can only drag the hand. Arm shape error 0.52 cm (geometry) vs 0 (part), torso drag 0.15 vs 0.60 cm.
 Per-part materials (`semantic_drop.py`: rigid body, soft arms) were not convincing with the current solver, whose shape
 matching is a single object-level rigid fit; per-part rigid fitting in the solver is the next step.
+
+Per-part physical properties (`semantic_shake.py`, portfolio key video): the feet are fixed to a base that is shaken
+(±4 cm, 2 Hz, 1.6 s). Geometry graph: one material everywhere (edge stiffness 0.3, object shape 0.1), so head, torso
+and arms wobble together. Part-aware: Gaussians whose `part_id` is not an arm move as a rigid body with the base, and
+only the arm Gaussians are a soft XPBD body (edge stiffness 0.2, shape 0.08). Wobble RMS head/torso/arm:
+2.20/1.35/2.18 cm vs 0/0/3.05 cm. Which parts are rigid or soft was chosen by hand.

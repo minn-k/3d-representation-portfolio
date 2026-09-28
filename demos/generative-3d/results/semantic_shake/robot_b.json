@@ -1,0 +1,46 @@
+{
+  "asset": "gen_robot_sem_d100k",
+  "soft": "arm",
+  "compliance": 5e-05,
+  "soft_stiff": 0.2,
+  "uniform_stiff": 0.3,
+  "uniform_shape": 0.1,
+  "semantic_shape": 0.08,
+  "rigid_body": 1,
+  "pin_h": 0.33,
+  "amp": 0.04,
+  "freq": 2.0,
+  "shake_s": 1.6,
+  "seconds": 4.0,
+  "damping": 0.002,
+  "gravity": 0.0,
+  "soft_gaussians": 20720,
+  "wobble_rms_cm": {
+    "uniform": {
+      "head": 2.203,
+      "arm": 2.181,
+      "torso": 1.348,
+      "leg": 0.048
+    },
+    "semantic": {
+      "head": 0.0,
+      "arm": 3.045,
+      "torso": 0.0,
+      "leg": 0.0
+    }
+  },
+  "wobble_peak_cm": {
+    "uniform": {
+      "head": 5.34,
+      "arm": 4.703,
+      "torso": 3.315,
+      "leg": 0.124
+    },
+    "semantic": {
+      "head": 0.0,
+      "arm": 7.539,
+      "torso": 0.0,
+      "leg": 0.0
+    }
+  }
+}
