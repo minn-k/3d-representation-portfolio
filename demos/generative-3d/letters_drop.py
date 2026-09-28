@@ -231,13 +231,20 @@ def main():
               "upright", sum(v > 0.75 for v in res.values()), flush=True)
         return
 
-    frames = []
     n_frames = int(args.seconds * args.fps) if not args.preview else 4
     steps_per_frame = max(1, round(60 / args.fps))
     t_phys = t_rend = 0.0
     times = [i / args.fps for i in range(n_frames)] if not args.preview else [1.6, 3.8, 5.6, 9.0]
     step_count = 0
     import imageio
+    writer = None
+    if not args.preview:
+        writer = imageio.get_writer(
+            os.path.join(out, f"letters_drop{args.tag}.mp4"),
+            fps=args.fps,
+            quality=8,
+            macro_block_size=8,
+        )
     for fi, t in enumerate(times):
         # 물리: 60 Hz 로 t 까지
         while step_count / 60 < t:
@@ -270,16 +277,17 @@ def main():
         else:                                         # 아직 출발한 글자가 없다
             img = np.full((H, W, 3), 255, np.uint8)
         t_rend += time.perf_counter() - t0
-        frames.append(img)
         if args.preview:
             imageio.imwrite(os.path.join(out, f"preview_{fi}.png"), img)
-        elif fi % 30 == 0:
-            print(f"[letters] frame {fi}/{n_frames}", flush=True)
+        else:
+            writer.append_data(img)
+            if fi % 30 == 0:
+                print(f"[letters] frame {fi}/{n_frames}", flush=True)
     if not args.preview:
-        imageio.mimsave(os.path.join(out, f"letters_drop{args.tag}.mp4"), frames, fps=args.fps, quality=8, macro_block_size=8)
+        writer.close()
     st = {"letters": LETTERS, "variant": VAR, "gaussians_per_letter": [int(len(l["P"])) for l in L],
           "drop_m": DROP, "gap_s": GAP_S, "gravity": GRAVITY, "object_shape": OBJECT_SHAPE, "restitution": RESTITUTION,
-          "friction": FRICTION, "iters": ITERS, "damping": DAMPING, "physics_hz": 60, "fps": args.fps, "frames": len(frames),
+          "friction": FRICTION, "iters": ITERS, "damping": DAMPING, "physics_hz": 60, "fps": args.fps, "frames": n_frames,
           "bounce": {"amp_m": BOUNCE_AMP, "up_s": BOUNCE_UP, "down_s": BOUNCE_DOWN, "start_s": BOUNCE_START,
                      "period_s": BOUNCE_PERIOD, "lag_s": BOUNCE_LAG, "end_s": BOUNCE_END},
           "physics_s": round(t_phys, 1), "render_s": round(t_rend, 1),
