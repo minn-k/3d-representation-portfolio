@@ -135,6 +135,7 @@ def main():
         save["asset_prob"] = res["vox_prob"][vi].astype(np.float32)
         st["asset"] = args.asset
         st["asset_share"] = {n: float(np.mean(save["asset_part"] == k)) for k, n in enumerate(names)}
+        st["asset_counts"] = {n: int(np.sum(save["asset_part"] == k)) for k, n in enumerate(names)}
     np.savez_compressed(os.path.join(out, "parts3d.npz"), **save)
     json.dump(st, open(os.path.join(out, "parts3d_stats.json"), "w", encoding="utf-8"), indent=2, ensure_ascii=False,
               default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o))
