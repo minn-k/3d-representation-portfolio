@@ -126,6 +126,13 @@ figure.media { margin: 0; }
 figure.media img, figure.media video {
   display: block; width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: #fff;
 }
+.asset-grid > figure.media > img,
+.asset-grid > figure.media > video,
+#apg .row3 > figure.media > img {
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  object-position: center;
+}
 figcaption { font-size: 13px; color: var(--ink3); margin-top: 6px; }
 
 .steps3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 24px 0; }
