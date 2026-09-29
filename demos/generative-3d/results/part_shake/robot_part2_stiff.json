@@ -1,0 +1,149 @@
+{
+  "asset": "gen_robot_sem_d100k",
+  "soft": "arm",
+  "compliance": 5e-05,
+  "uniform_stiff": 0.3,
+  "uniform_shape": 0.1,
+  "body_stiff": 1.0,
+  "body_shape": 0.25,
+  "soft_stiff": 0.2,
+  "soft_shape": 0.05,
+  "blend_hops": 6,
+  "min_piece": 200,
+  "groups": "soft",
+  "no_part_shape": false,
+  "no_part_volume": false,
+  "no_edge_ramp": false,
+  "pin_h": 0.33,
+  "amp": 0.02,
+  "freq": 2.0,
+  "shake_s": 2.4,
+  "seconds": 5.0,
+  "damping": 0.002,
+  "dll": "xpbd_isaac_part_v2.dll",
+  "pieces": [
+    {
+      "piece": 0,
+      "part": "head",
+      "gaussians": 36092
+    },
+    {
+      "piece": 1,
+      "part": "torso",
+      "gaussians": 16755
+    },
+    {
+      "piece": 2,
+      "part": "leg",
+      "gaussians": 26550
+    },
+    {
+      "piece": 3,
+      "part": "arm",
+      "gaussians": 11567
+    },
+    {
+      "piece": 4,
+      "part": "arm",
+      "gaussians": 8609
+    }
+  ],
+  "boundary_edges": 7978,
+  "part_stats": {
+    "cross_label_volume_clusters": 0,
+    "fallback_groups": 0,
+    "shape_groups": 3
+  },
+  "wobble_rms_cm": {
+    "uniform": {
+      "head": 1.228,
+      "arm": 1.219,
+      "torso": 0.702,
+      "leg": 0.038
+    },
+    "part": {
+      "head": 1.277,
+      "arm": 0.987,
+      "torso": 0.65,
+      "leg": 0.021
+    }
+  },
+  "soft_rel_body_cm": {
+    "uniform": {
+      "rms": 0.71,
+      "max": 1.971
+    },
+    "part": {
+      "rms": 0.652,
+      "max": 1.282
+    }
+  },
+  "wobble_peak_cm": {
+    "uniform": {
+      "head": 2.667,
+      "arm": 2.507,
+      "torso": 1.933,
+      "leg": 0.141
+    },
+    "part": {
+      "head": 2.94,
+      "arm": 2.143,
+      "torso": 1.487,
+      "leg": 0.058
+    }
+  },
+  "shape_error_cm": {
+    "uniform": {
+      "head": {
+        "rms": 0.055,
+        "max": 0.167
+      },
+      "arm": {
+        "rms": 0.03,
+        "max": 0.09
+      },
+      "torso": {
+        "rms": 0.067,
+        "max": 0.181
+      },
+      "leg": {
+        "rms": 0.15,
+        "max": 0.53
+      }
+    },
+    "part": {
+      "head": {
+        "rms": 0.009,
+        "max": 0.025
+      },
+      "arm": {
+        "rms": 0.065,
+        "max": 0.134
+      },
+      "torso": {
+        "rms": 0.024,
+        "max": 0.068
+      },
+      "leg": {
+        "rms": 0.081,
+        "max": 0.216
+      }
+    }
+  },
+  "boundary": {
+    "uniform": {
+      "p95_max": 1.114,
+      "max": 3.332,
+      "over_1p5_max": 0.01567
+    },
+    "part": {
+      "p95_max": 1.733,
+      "max": 6.39,
+      "over_1p5_max": 0.13399
+    }
+  },
+  "step_ms": {
+    "uniform": 15.27,
+    "part": 15.71
+  }
+}
