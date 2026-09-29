@@ -173,3 +173,6 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 48px; color: var(--i
 .opener { margin: -40px 0 36px; }
 .opener video { border: 0; border-radius: 14px; }
 @media (max-width: 900px) { .opener { margin-top: -16px; } }
+.trial figcaption, .trial-note { font-size: 26px; line-height: 1.6; color: var(--ink2); }
+.trial figcaption { margin: 10px 0 28px; }
+@media (max-width: 900px) { .trial figcaption, .trial-note { font-size: 18px; } }

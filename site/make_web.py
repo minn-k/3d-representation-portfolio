@@ -288,28 +288,28 @@ def sem_section():
     <h3>분류는 어떻게 다듬었나 — 곰 인형에서 4단계</h3>
     <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (아래 기준선). 그래서 생성 모델이 사진의 어디를 보는지(attention)에서 출발했고,
       털 질감이 고른 곰 인형에서 부위가 섞이는 문제를 네 단계로 고쳤다. 단계별 그림은 같은 곰을 정면 · 옆 · 뒤 · 반대 옆에서 본 것.</p>
-    <figure class="media"><img src="assets/bear_sem_baselines.jpg" alt="기준선 — 이름 없이 묶기" loading="lazy">
+    <figure class="media trial"><img src="assets/bear_sem_baselines.jpg" alt="기준선 — 이름 없이 묶기" loading="lazy">
       <figcaption><b>기준선 · 이름 없이 묶기</b> — 위에서부터 DiT 특징 · decoder 특징 · 좌표 k-means.
         특징으로 묶으면 무늬대로, 좌표로 묶으면 위치대로 나뉘어 부위가 되지 않는다 (색 = 묶음 번호).</figcaption></figure>
-    <figure class="media"><img src="assets/bear_parts_try1.jpg" alt="1차 — attention 투표 + DiT 특징 전파" loading="lazy">
+    <figure class="media trial"><img src="assets/bear_parts_try1.jpg" alt="1차 — attention 투표 + DiT 특징 전파" loading="lazy">
       <figcaption><b>1차 · attention 투표 + DiT 특징 전파</b> — 오른팔 안쪽에 머리 라벨이 띠처럼 섞이고 다리에 머리 점이 생겼다.
         attention 은 대응점이 아니라 비슷한 특징을 찾는 것이라 고른 털에서는 엉뚱한 패치까지 보고, 가려진 복셀도 앞 픽셀로 투표했으며,
         넓은 전파 반경이 팔과 몸통 사이 틈을 건넜다.</figcaption></figure>
-    <figure class="media"><img src="assets/bear_parts_try2.jpg" alt="2차 — 입력 카메라 추정 + 보이는 복셀만 투영" loading="lazy">
+    <figure class="media trial"><img src="assets/bear_parts_try2.jpg" alt="2차 — 입력 카메라 추정 + 보이는 복셀만 투영" loading="lazy">
       <figcaption><b>2차 · 입력 카메라 추정 + 보이는 복셀만 투영</b> — 앞면은 깨끗해졌지만, 가려진 옆 · 뒤를 표면을 따라 번지는 전파로 채워
         팔이 몸통 옆과 허벅지까지 먹고 꼬리는 다리가 됐다 (사진에서 몸통 라벨은 배뿐이었다).</figcaption></figure>
-    <figure class="media"><img src="assets/bear_sem_camera_fit.jpg" alt="2차의 입력 카메라 추정" loading="lazy">
+    <figure class="media trial"><img src="assets/bear_sem_camera_fit.jpg" alt="2차의 입력 카메라 추정" loading="lazy">
       <figcaption>2차의 입력 카메라 추정 — attention 으로 초기값을 잡고 실루엣으로 다듬었다 (실루엣 일치 0.30 → 0.89).
         왼쪽 사진의 2D 부위 · 가운데 추정 카메라로 본 3D 부위 · 오른쪽 실루엣 비교 (회색 = 일치 · 빨강 = 복셀만 · 파랑 = 사진만).</figcaption></figure>
-    <figure class="media"><img src="assets/bear_parts_try3.jpg" alt="3차 — 가려진 쪽은 부피 기준" loading="lazy">
+    <figure class="media trial"><img src="assets/bear_parts_try3.jpg" alt="3차 — 가려진 쪽은 부피 기준" loading="lazy">
       <figcaption><b>3차 · 가려진 쪽은 '어느 부위의 속(부피)에 붙어 있나' 로</b> — 복셀 껍질을 속이 찬 부피로 채우고, 가려진 표면마다
         부피 안에서 가장 가깝게 닿는 부위의 속을 따랐다 (두꺼운 속은 지나기 쉽고, 목처럼 얇은 연결은 어렵게).
         등과 꼬리가 배와 같은 몸통으로 돌아왔다. 뒷머리 · 목 뒤에는 팔 라벨이 아직 조금 섞인다.</figcaption></figure>
-    <figure class="media"><img src="assets/bear_sem_vox_feat_diff.jpg" alt="4차 — 복셀 특징 유사도로 바뀐 위치" loading="lazy">
+    <figure class="media trial"><img src="assets/bear_sem_vox_feat_diff.jpg" alt="4차 — 복셀 특징 유사도로 바뀐 위치" loading="lazy">
       <figcaption><b>4차 · 복셀 특징 유사도로 경계 보정</b> — Gaussian decoder 의 복셀 특징(768 → 64차원)으로, 사진에서 이름을 받은 복셀들의
         부위별 대표 특징과 닮은 정도를 약하게(20%) 투표하고 맞닿은 복셀끼리 전파했다. 사진에서 받은 라벨은 고정한다.
         곰에서 {bfeat.get('voxels_changed', 0):,} / {bvoxels:,} 복셀이 바뀌었고 (그림에서 색이 칠해진 곳), 뒷머리의 빨간 줄은 3차에서 팔로 섞였던 곳이 머리로 돌아온 것이다.</figcaption></figure>
-    <p class="note">실제 곰에는 정답 라벨이 없어, 부위를 아는 <b>합성 곰</b>(구 · 타원체 · 캡슐로 만든 곰에 알려진 카메라로 2D 부위와
+    <p class="note trial-note">실제 곰에는 정답 라벨이 없어, 부위를 아는 <b>합성 곰</b>(구 · 타원체 · 캡슐로 만든 곰에 알려진 카메라로 2D 부위와
       잡음 섞인 attention 을 만든 시험, tests/test_parts_core.py)으로 정확도를 쟀다.</p>
     <div class="table-wrap"><table class="metrics">
       <tr><th rowspan="2">합성 곰 · 부위 분류 정확도<br><small>정답과 같은 부위로 분류된 복셀의 비율<br>높을수록 좋음</small></th><th colspan="2">표면 위치별</th><th colspan="2">부위별</th></tr>
