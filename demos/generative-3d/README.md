@@ -149,7 +149,15 @@ colour correlation 0.438, with no attention fallback. On the synthetic bear the 
   edge stretch and step time;
   `--no-part-shape`, `--no-part-volume` and `--no-edge-ramp` switch the parts off one at a time.
   `tests/runtime_regression.py` checks that the part-aware DLL matches the previous DLL bit for bit when no part IDs
-  are set.
+  are set (robot, 120 steps: identical).
+  Robot runs (±2 cm sideways, 2 Hz): with one shape fit for the whole robot but part-bounded volume clusters and
+  blended edge stiffness (`--no-part-shape`), torso sway drops from 0.70 to 0.53 cm RMS, boundary edges stretched
+  beyond 1.5× from 1.6% to 0.5%, and shape error is lower for every part; the arms do not move more relative to the
+  body. With their own shape groups the arms deform more but still do not swing, and 13% of boundary edges stretch
+  beyond 1.5×: two disjoint shape groups meet at a seam held only by distance edges. Sideways shaking also acts along
+  the robot's outstretched arms, which gives no torque about the shoulder (`--axis z` shakes up and down). The next
+  solver step is to blend both groups' goals over the boundary band (overlapping regions, as in lattice shape
+  matching) instead of disjoint groups.
 - **Export** (`export_parts.py`). `part_id` as a PLY property, raw bytes and JSON, plus SIBR model folders coloured by
   part or with chosen parts hidden. The SIBR viewer has no per-part toggles or per-part physics UI yet.
 
