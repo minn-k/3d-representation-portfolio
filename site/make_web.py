@@ -127,6 +127,10 @@ def build_media():
     if os.path.exists(sv):                                            # 핵심 영상: 흔들기 (semantic_shake.py)
         enc(sv, os.path.join(A, "robot_shake.mp4"))
         first_frame(os.path.join(A, "robot_shake.mp4"), os.path.join(A, "robot_shake.jpg"), 1.0)
+    pv = os.path.join(GEN, "part_shake", "robot_part2_stiff.mp4")
+    if os.path.exists(pv):                                            # 부위를 아는 솔버 흔들기 (part_shake.py)
+        enc(pv, os.path.join(A, "robot_part_shake.mp4"))
+        first_frame(os.path.join(A, "robot_part_shake.mp4"), os.path.join(A, "robot_part_shake.jpg"), 1.0)
     return rows
 
 
@@ -215,6 +219,32 @@ def sem_section():
         return jl(p) if os.path.exists(p) else None
     sh = jl(os.path.join(GEN, "semantic_shake", "robot_b.json"))
     wu, ws = sh["wobble_rms_cm"]["uniform"], sh["wobble_rms_cm"]["semantic"]
+
+    ps_path = os.path.join(GEN, "part_shake", "robot_part2_stiff.json")
+    pn_path = os.path.join(GEN, "part_shake", "robot_part_noshape.json")
+    part_shake_html = ""
+    if os.path.exists(ps_path) and os.path.exists(pn_path):          # 부위를 아는 솔버 (part_shake.py)
+        ps, pn = jl(ps_path), jl(pn_path)
+        pu, pp, nn = ps["wobble_rms_cm"]["uniform"], ps["wobble_rms_cm"]["part"], pn["wobble_rms_cm"]["part"]
+        bu, bp, bn = (100 * x["boundary"][m]["over_1p5_max"] for x, m in ((ps, "uniform"), (ps, "part"), (pn, "part")))
+        ru, rp = ps["soft_rel_body_cm"]["uniform"]["rms"], ps["soft_rel_body_cm"]["part"]["rms"]
+        part_shake_html = f"""
+
+    <h3>부위를 아는 솔버 — 강체 고정 없이 (진행 중)</h3>
+    <p class="sub">위 영상은 몸을 받침에 강체로 붙였다. 이번에는 두 로봇 모두 <b>발만 고정한 한 덩어리 연체</b>이고 모양 · 그래프 · 솔버가 같다.
+      오른쪽만 part_id 를 솔버에 넘겼다: 부피 클러스터는 부위 안에서만, 형상 유지는 몸(머리 · 몸통 · 다리) 하나와 왼팔 · 오른팔을 따로,
+      간선 강성은 경계에서 몸 → 팔로 매끄럽게 이어지게. 받침은 좌우 ±{ps['amp'] * 100:.0f} cm · {ps['freq']:.0f} Hz · {ps['shake_s']} s.</p>
+    {video("robot_part_shake.mp4", "robot_part_shake.jpg", f"왼쪽 기존 그래프 · 물성 하나 · 오른쪽 부위를 아는 솔버 (형상 유지 몸 {ps['body_shape']} · 팔 {ps['soft_shape']}, 간선 강성 몸 {ps['body_stiff']} → 팔 {ps['soft_stiff']})", True)}
+    <div class="table-wrap"><table class="metrics">
+      <tr><th>발만 고정한 로봇<br><small>흔들림 = 받침 이동을 뺀 평균 (RMS, cm) · 팔 (몸 기준) = 몸의 강체 운동을 뺀 팔의 움직임<br>경계 간선 = 부위가 다른 두 가우시안을 잇는 간선 · 낮을수록 이음매가 자연스러움</small></th><th>머리</th><th>몸통</th><th>팔 (몸 기준)</th><th>경계 간선<br><small>1.5배 넘게 늘어난 비율</small></th></tr>
+      <tr><td>기존 그래프 · 물성 하나</td><td>{pu['head']:.2f}</td><td>{pu['torso']:.2f}</td><td>{ru:.2f}</td><td>{bu:.1f}%</td></tr>
+      <tr><td>부위를 아는 솔버 (위 영상)</td><td>{pp['head']:.2f}</td><td>{pp['torso']:.2f}</td><td>{rp:.2f}</td><td>{bp:.1f}%</td></tr>
+      <tr><td>형상 유지는 하나 · 부피 · 강성만 부위별</td><td>{nn['head']:.2f}</td><td><b>{nn['torso']:.2f}</b></td><td>—</td><td><b>{bn:.1f}%</b></td></tr>
+    </table></div>
+    <p class="note">아직 목표(몸은 덜, 팔은 더)에 못 미친다. 좌우로 흔들면 힘이 옆으로 뻗은 팔의 <b>길이 방향</b>으로 들어가 팔을 돌리지 못하고,
+      보이는 움직임은 무거운 머리가 끄덕이는 것이다. 팔에 따로 형상 기준을 주면 두 기준이 만나는 어깨 이음매를 거리 간선만 붙잡아
+      경계 간선이 13% 넘게 늘어난다. 형상 기준은 하나로 두고 부피 · 강성만 부위별로 하면 몸통 흔들림이 25% 줄고 경계 늘어남이 1/3 로
+      확실히 나아진다. 다음 단계는 경계 띠에서 두 기준의 목표를 섞는 것(겹치는 형상 영역, lattice shape matching)과 위아래로 흔드는 비교.</p>"""
     def labels_and_stats(name):
         z = np.load(os.path.join(GEN, name, "parts3d.npz"))
         names = [str(x) for x in z["names"]]
@@ -263,7 +293,7 @@ def sem_section():
     <p class="note">목표는 머리 · 몸통은 0 (단단), 팔만 출렁임 — 의미 부위 쪽이 그대로 나왔고, 기존 그래프는 온몸이 같이 출렁인다.
       물성 — 기존 그래프: 온몸 간선 강성 {sh['uniform_stiff']} · 물체 형상 유지 {sh['uniform_shape']} (다리만 받침에 고정).
       의미 부위: part_id 가 팔이 아닌 가우시안(몸통 · 머리 · 다리)은 강체로 받침과 함께 움직이고, 팔 가우시안만 간선 강성 {sh['soft_stiff']} ·
-      형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계. 이 영상은 로봇의 이전(1차) part_id 로 만든 것이다.</p>
+      형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계. 이 영상은 로봇의 이전(1차) part_id 로 만든 것이다.</p>{part_shake_html}
 
     <h3>분류는 어떻게 다듬었나 — 곰 인형에서의 4단계 개선</h3>
     <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (좌표 k-means 는 머리와 몸을 가로질러 자르고, 특징 k-means 는 무늬로 묶는다).
