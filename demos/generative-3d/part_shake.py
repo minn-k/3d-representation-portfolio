@@ -9,10 +9,15 @@
   · 간선 강성을 부위별로 주되, 경계에서 그래프 이웃 평균으로 몇 가우시안에 걸쳐 이어지게 (--blend-hops)
 부위 조각 = 같은 부위끼리 이어진 덩어리. 솔버는 (그래프 연결 성분, id) 로 형상 그룹을 나누는데 로봇 전체가 한 연결 성분이라
 'arm' 하나로 넘기면 두 팔이 한 강체 맞춤에 묶인다 → 조각 번호(왼팔 · 오른팔 따로)를 넘긴다. 작은 조각은 이웃 조각에 붙인다.
+--groups soft (기본): 말랑한 부위 조각만 따로 형상 그룹이고, 나머지 몸(머리 · 몸통 · 다리)은 한 그룹.
+  몸의 부위마다 따로 강체로 되돌리면(--groups all) 몸통이 다리 위에서 통째로 미끄러져 허리가 끊겨 보였다
+  (로봇, 경계 간선 11.6% 가 1.5 배 넘게 늘어남). 몸은 한 덩어리로 되돌아가야 부위 사이가 이어진다.
 지표 (json):
   wobble_rms_cm   부위별 흔들림 — 받침 이동을 뺀, 쉬는 자세에서 벗어난 거리의 시간 RMS (semantic_shake.py 와 같은 정의)
   shape_error_cm  부위별 모양 망가짐 — 조각마다 강체 맞춤 뒤 남는 RMS 의 시간 RMS · 최대 (semantic_drop.rigid_rms)
   boundary        부위 경계 간선의 늘어남 (길이 / 원래 길이) 95 퍼센타일 · 최대 · 1.5 배 넘은 비율의 최대
+  soft_rel_body_cm 말랑한 부위가 몸에 대해 움직인 거리 — 몸(말랑하지 않은 가우시안)의 강체 운동을 빼고 잰 평균의 시간 RMS · 최대
+                  ('팔만 덜렁' 의 지표. wobble 은 몸 전체의 흔들림이 섞인다)
   step_ms         스텝 평균 시간 (호스트에서 잰 값)
 --no-part-shape / --no-part-volume / --no-edge-ramp 로 오른쪽 요소를 하나씩 끈 비교를 따로 만든다.
 출력 out/part_shake/<tag>.mp4 · _mid.png · .json
@@ -103,6 +108,8 @@ def main():
     ap.add_argument("--soft-shape", type=float, default=0.05, help="오른쪽: 말랑한 부위 조각 형상 유지")
     ap.add_argument("--blend-hops", type=int, default=6, help="오른쪽: 경계에서 간선 강성을 섞는 횟수")
     ap.add_argument("--min-piece", type=int, default=200, help="이보다 작은 부위 조각은 이웃 조각에 붙인다")
+    ap.add_argument("--groups", default="soft", choices=["soft", "all"],
+                    help="soft = 말랑한 부위 조각만 따로 형상 그룹, 몸은 한 그룹 · all = 모든 부위 조각이 따로")
     ap.add_argument("--no-part-shape", action="store_true", help="비교용: 오른쪽 형상 유지를 물체 하나로")
     ap.add_argument("--no-part-volume", action="store_true", help="비교용: 오른쪽 부피 클러스터 부위 제한 끔")
     ap.add_argument("--no-edge-ramp", action="store_true", help="비교용: 오른쪽 간선 강성도 왼쪽과 같게")
@@ -153,6 +160,24 @@ def main():
     print(f"[part_shake] {len(pieces)} part pieces: " + ", ".join(f"{p['part']}:{p['gaussians']:,}" for p in pieces)
           + f" | soft ({args.soft}) {soft.sum():,} | pinned {len(pin):,} | dll {os.path.basename(src)}", flush=True)
     cross = part_clean[e[:, 0]] != part_clean[e[:, 1]]           # 부위 경계 간선 (지표용)
+    soft_piece = np.isin(piece_part, soft_ids)
+    if args.groups == "soft":                                    # 몸 = id 0 하나, 말랑한 조각 = 1, 2, …
+        gid = np.zeros(len(piece_part), np.int32)
+        gid[soft_piece] = np.arange(1, soft_piece.sum() + 1)
+        group_ids = gid[piece]
+        group_shape = np.r_[args.body_shape, np.full(soft_piece.sum(), args.soft_shape)].astype(np.float32)
+    else:
+        group_ids = piece
+        group_shape = np.where(soft_piece, args.soft_shape, args.body_shape).astype(np.float32)
+    body = ~soft
+
+    def soft_rel_body(P):
+        """말랑한 가우시안이 몸의 강체 운동을 뺀 뒤 쉬는 자세에서 벗어난 평균 거리 (원본 단위)."""
+        a0, a = P0[body], P[body]
+        c0, c = a0.mean(0), a.mean(0)
+        U, _, Vt = np.linalg.svd((a0 - c0).T @ (a - c))
+        R = (U @ np.diag([1, 1, np.sign(np.linalg.det(U @ Vt))]) @ Vt).T
+        return float(np.mean(np.linalg.norm(P[soft] - ((P0[soft] - c0) @ R.T + c), axis=1)))
 
     modes = ("uniform", "part")
     sims = []
@@ -178,10 +203,9 @@ def main():
         sim.set_object_shape(args.uniform_shape if mode == "uniform" else args.body_shape)
         sim.set_object_shape_gpu(True)
         if mode == "part":
-            sim.set_part_ids(np.ascontiguousarray(piece), restrict_volume=not args.no_part_volume,
+            sim.set_part_ids(np.ascontiguousarray(group_ids.astype(np.int32)), restrict_volume=not args.no_part_volume,
                              shape_groups=not args.no_part_shape)
-            sim.set_part_shape(np.ascontiguousarray(np.where(np.isin(piece_part, soft_ids), args.soft_shape,
-                                                             args.body_shape).astype(np.float32)))
+            sim.set_part_shape(np.ascontiguousarray(group_shape))
         sim.set_ground(False, (0, 0, 1), 0.0, gravity=0.0)
         sim.step()
         sim.reset()
@@ -197,6 +221,7 @@ def main():
     wob = {m: {n: [] for n in names} for m in modes}
     shp = {m: {n: [] for n in names} for m in modes}
     bnd = {m: {"p95": [], "max": [], "over_1p5": []} for m in modes}
+    rel = {m: [] for m in modes}
     step_s = {m: 0.0 for m in modes}
     frames = []
     n_steps = int(args.seconds * 60)
@@ -225,6 +250,8 @@ def main():
                             for p in np.nonzero(piece_part == kk)[0] if (piece == p).sum() >= 4]
                     if errs:
                         shp[mode][n].append(float(np.mean(errs)))
+            if soft.any() and body.any():
+                rel[mode].append(soft_rel_body(P) * s * 100)
             if cross.any():
                 r = np.linalg.norm(P[e[cross, 0]] - P[e[cross, 1]], axis=1) / np.maximum(rest[cross], 1e-12)
                 bnd[mode]["p95"].append(float(np.percentile(r, 95)))
@@ -251,13 +278,14 @@ def main():
     rms = lambda v: round(float(np.sqrt(np.mean(np.square(v)))), 3)  # noqa: E731
     st = {k_: getattr(args, k_) for k_ in ("asset", "soft", "compliance", "uniform_stiff", "uniform_shape", "body_stiff",
                                             "body_shape", "soft_stiff", "soft_shape", "blend_hops", "min_piece",
-                                            "no_part_shape", "no_part_volume", "no_edge_ramp", "pin_h", "amp", "freq",
+                                            "groups", "no_part_shape", "no_part_volume", "no_edge_ramp", "pin_h", "amp", "freq",
                                             "shake_s", "seconds", "damping")}
     st.update({
         "dll": os.path.basename(src), "pieces": pieces, "boundary_edges": int(cross.sum()),
         "part_stats": {"cross_label_volume_clusters": int(part_stats[0]), "fallback_groups": int(part_stats[1]),
                        "shape_groups": int(part_stats[2])},
         "wobble_rms_cm": {m: {n: rms(v) for n, v in c.items() if v} for m, c in wob.items()},
+        "soft_rel_body_cm": {m: {"rms": rms(v), "max": round(float(np.max(v)), 3)} for m, v in rel.items() if v},
         "wobble_peak_cm": {m: {n: round(float(np.max(v)), 3) for n, v in c.items() if v} for m, c in wob.items()},
         "shape_error_cm": {m: {n: {"rms": rms(v), "max": round(float(np.max(v)), 3)} for n, v in c.items() if v}
                            for m, c in shp.items()},
@@ -266,7 +294,7 @@ def main():
         "step_ms": {m: round(1000 * v / max(n_steps, 1), 2) for m, v in step_s.items()},
     })
     json.dump(st, open(os.path.join(out, f"{args.tag}.json"), "w"), indent=2, ensure_ascii=False)
-    print("[part_shake]", json.dumps({k_: st[k_] for k_ in ("part_stats", "wobble_rms_cm", "boundary", "step_ms")},
+    print("[part_shake]", json.dumps({k_: st[k_] for k_ in ("part_stats", "wobble_rms_cm", "soft_rel_body_cm", "boundary", "step_ms")},
                                      ensure_ascii=False), flush=True)
 
 

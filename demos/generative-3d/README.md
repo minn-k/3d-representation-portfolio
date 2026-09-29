@@ -81,9 +81,10 @@ The pass has two parts: propagation on the 26-neighbour voxel graph, and a weak 
 visible seeds have the most similar mean feature. On the synthetic teddy (overall 88.57% → 90.26%, boundary 76.25% →
 79.95%) nearly all of the gain comes from the vote: the graph step alone gives 88.74% / 76.58%, and the same pass run
 on the existing DiT token features copied to their 2³ voxels gives 90.22% / 79.89%. So the synthetic test supports the
-new step, not a benefit of the decoder feature's finer resolution. `--vox-feat dit` runs that comparison on a real
-asset. On the real bear, the changed voxels include the back-of-head streak that the 3rd method still labeled arm; they
-now read head.
+new step, not a benefit of the decoder feature's finer resolution. On the real bear, the changed voxels include the
+back-of-head streak that the 3rd method still labeled arm; they now read head. `--vox-feat dit` fixes the same streak
+(492 changed voxels, including a band at the back of the neck, vs 305 with the decoder feature), so on real data too
+the fix comes from the vote; the decoder feature only makes the change more local.
 
 **Why the teddy bear's arm mixed** under the attention-only version:
 
@@ -142,7 +143,10 @@ colour correlation 0.438, with no attention fallback. On the synthetic bear the 
   robots are one soft body fixed only at the feet. The right one passes *part pieces* (same-part connected pieces, so
   the left and right arm are separate; pieces under 200 Gaussians join their neighbour) to `set_part_ids`, gives the
   soft pieces weaker shape matching (0.05 vs 0.15) and blends edge stiffness from body (0.6) to arm (0.2) over six
-  graph hops at the boundary. It records per-part wobble, per-piece shape error, boundary edge stretch and step time;
+  graph hops at the boundary. Only the soft pieces get their own shape group (`--groups soft`); head, torso and legs
+  share one. With a group per body part (`--groups all`) the torso slid as a block over the pinned legs and the waist
+  looked cut: 11.6% of boundary edges stretched beyond 1.5× (1.6% for the uniform robot). It records per-part wobble, arm motion relative to the body's rigid motion, per-piece shape error, boundary
+  edge stretch and step time;
   `--no-part-shape`, `--no-part-volume` and `--no-edge-ramp` switch the parts off one at a time.
   `tests/runtime_regression.py` checks that the part-aware DLL matches the previous DLL bit for bit when no part IDs
   are set.
