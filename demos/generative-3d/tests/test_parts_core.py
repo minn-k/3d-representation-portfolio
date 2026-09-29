@@ -145,13 +145,36 @@ def make_scene(seed=0):
         fur = np.where(gt_t < 4, 1.0, 0.0)[:, None] * E[5]
         f = np.concatenate([0.35 * E[gt_t] + 0.6 * fur, 0.35 * pos[:, :16]], 1)
         sem[f"feat_{b}"] = (f + rng.normal(0, 0.25, f.shape)).astype(np.float16)
+    # Decoder-like voxel features: the same weak part / shared-fur / spatial
+    # signal as the token feature, but one descriptor per 64³ surface voxel.
+    # They deliberately are not strong enough to name a part on their own.
+    Ev = rng.normal(0, 1, (6, 32))
+    Ev /= np.linalg.norm(Ev, axis=1, keepdims=True)
+    Wv = rng.normal(0, 1, (3, 16)) * 3.0
+    posv = np.concatenate([np.sin(Xv @ Wv), np.cos(Xv @ Wv)], 1)
+    furv = np.where(gt_v < 4, 1.0, 0.0)[:, None] * Ev[5]
+    dec_feat = np.concatenate([0.35 * Ev[gt_v] + 0.6 * furv, 0.35 * posv[:, :16]], 1)
+    dec_feat = (dec_feat + rng.normal(0, 0.25, dec_feat.shape)).astype(np.float16)
     return {"sem": sem, "label": label, "alpha": alpha, "img": img, "col": col, "gt_v": gt_v, "gt_t": gt_t,
-            "cam": cam, "Xv": Xv, "vis": vis}
+            "cam": cam, "Xv": Xv, "vis": vis, "dec_feat": dec_feat}
 
 
 def _acc(pred, gt, k=None):
     m = np.ones(len(gt), bool) if k is None else gt == k
     return float(np.mean(pred[m] == gt[m]))
+
+
+def _boundary_mask(coords, gt):
+    """Surface voxels within Chebyshev distance two of a true part boundary."""
+    from scipy import ndimage
+    from scipy.spatial import cKDTree
+    pairs = cKDTree(coords.astype(np.float32)).query_pairs(r=1.8, output_type="ndarray")
+    bd = np.zeros((64, 64, 64), bool)
+    cross = gt[pairs[:, 0]] != gt[pairs[:, 1]]
+    bd[tuple(coords[pairs[cross, 0]].T)] = True
+    bd[tuple(coords[pairs[cross, 1]].T)] = True
+    near = ndimage.binary_dilation(bd, structure=np.ones((3, 3, 3)), iterations=2)
+    return near[tuple(coords.T)]
 
 
 def run(verbose=True):
@@ -188,6 +211,24 @@ def test_projection_lift_beats_attention_only():
     assert res["proj"]["arm_acc"] > res["attn"]["arm_acc"]
     assert res["proj"]["hidden_acc"] > res["attn"]["hidden_acc"] + 0.08          # 가려진 쪽 (부피 단계)
     assert res["proj"]["body_acc"] > res["attn"]["body_acc"] + 0.3
+
+
+def test_voxel_features_sharpen_boundaries():
+    sc = make_scene()
+    common = dict(mode="proj", alpha_mask=sc["alpha"], cond_rgb=sc["img"], vox_col=sc["col"],
+                  log=lambda *a, **k: None)
+    base, _ = pc.lift(sc["sem"], sc["label"], NAMES, **common)
+    Fv = pc.voxel_features(sc["dec_feat"], pca_dim=32)
+    refined, st = pc.lift(sc["sem"], sc["label"], NAMES, vox_feat=Fv, vox_feat_pca=32, **common)
+    boundary = _boundary_mask(sc["sem"]["slat_coords"], sc["gt_v"])
+    base_boundary = _acc(base["vox_part"][boundary], sc["gt_v"][boundary])
+    refined_boundary = _acc(refined["vox_part"][boundary], sc["gt_v"][boundary])
+    assert st["vox_feat"]["applied"]
+    assert refined_boundary >= base_boundary + 0.02
+    assert _acc(refined["vox_part"], sc["gt_v"]) >= _acc(base["vox_part"], sc["gt_v"]) - 0.005
+    assert _acc(refined["vox_part"][~sc["vis"]], sc["gt_v"][~sc["vis"]]) >= \
+        _acc(base["vox_part"][~sc["vis"]], sc["gt_v"][~sc["vis"]]) - 0.01
+    assert _acc(refined["vox_part"][sc["vis"]], sc["gt_v"][sc["vis"]]) >= 0.95
 
 
 if __name__ == "__main__":

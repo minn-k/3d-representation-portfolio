@@ -1,12 +1,7 @@
 {
-  "parts": [
-    "head",
-    "antenna",
-    "arm",
-    "torso",
-    "leg"
-  ],
+  "mode": "proj",
   "tokens": 4051,
+  "voxels": 20498,
   "token_share_attn": {
     "head": 0.29893853369538387,
     "antenna": 0.0017279684028634905,
@@ -14,21 +9,149 @@
     "torso": 0.16514440878795358,
     "leg": 0.22735127129103924
   },
-  "token_share_prop": {
-    "head": 0.3135028388052333,
-    "antenna": 0.0004937052579609973,
-    "arm": 0.3065909651937793,
-    "torso": 0.15675141940261664,
-    "leg": 0.22266107134040977
+  "camera": {
+    "R": [
+      [
+        0.9308,
+        0.36551,
+        -0.00357
+      ],
+      [
+        -0.0017,
+        -0.00543,
+        -0.99998
+      ],
+      [
+        -0.36552,
+        0.93079,
+        -0.00443
+      ]
+    ],
+    "s_px_per_unit": 402.89,
+    "c_px": [
+      275.66,
+      233.97
+    ],
+    "kappa": 0.4347,
+    "x0": [
+      -0.0341,
+      0.0491,
+      0.036
+    ],
+    "focal_px": 926.8,
+    "silhouette_iou_affine_init": 0.3283,
+    "silhouette_iou": 0.8532,
+    "chosen_start": "search az0 el-10 k0.25",
+    "fit_cost": 1.128,
+    "starts": [
+      {
+        "start": "search az0 el-10 k0.25",
+        "iou": 0.8434,
+        "color_corr": 0.4509
+      },
+      {
+        "start": "search az0 el5 k0.25",
+        "iou": 0.8434,
+        "color_corr": 0.4473
+      },
+      {
+        "start": "search az345 el-10 k0.25",
+        "iou": 0.8429,
+        "color_corr": 0.4466
+      },
+      {
+        "start": "search az345 el-10 k0.5",
+        "iou": 0.8426,
+        "color_corr": 0.4421
+      },
+      {
+        "start": "search az345 el5 k0.25",
+        "iou": 0.8407,
+        "color_corr": 0.4397
+      },
+      {
+        "start": "search az180 el5 k0.25",
+        "iou": 0.7831,
+        "color_corr": -0.008
+      },
+      {
+        "start": "attention",
+        "iou": 0.6865,
+        "color_corr": 0.0731
+      }
+    ],
+    "color_corr_visible": 0.4375
   },
-  "changed_by_propagation": 0.05011108368304122,
-  "conf_median": 0.7496147155761719,
+  "fallback_to_attn": false,
+  "volumetric": {
+    "solid_voxels": 33481,
+    "shell_voxels": 20498,
+    "core_voxels": 7214,
+    "max_depth_vox": 13.0,
+    "seeds": {
+      "head": 500,
+      "antenna": 16,
+      "arm": 834,
+      "torso": 516,
+      "leg": 715
+    },
+    "voxels_changed": 3111,
+    "weight": 0.8,
+    "power": 2.0
+  },
+  "voxels_cleaned": 36,
+  "visible_voxels": 0.21924090155137085,
+  "visible_labeled_voxels": 0.13425700068299345,
+  "tokens_with_projection": 0.20241915576400887,
+  "tokens_clamped": 0.1614416193532461,
+  "tokens_cleaned": 34,
+  "erode_px": 2,
+  "graph_radius": 1.8,
+  "iters": 120,
+  "voxel_share": {
+    "head": 0.3654502878329593,
+    "antenna": 0.002244121377695385,
+    "arm": 0.20894721436237682,
+    "torso": 0.2090447848570592,
+    "leg": 0.21431359156990926
+  },
+  "token_share": {
+    "head": 0.3265860281411997,
+    "antenna": 0.004196494692668477,
+    "arm": 0.3058504073068378,
+    "torso": 0.15082695630708468,
+    "leg": 0.21254011355220934
+  },
+  "changed_vs_attention": 0.06985929400148111,
+  "conf_median": 0.8268371153800798,
+  "parts": [
+    "head",
+    "antenna",
+    "arm",
+    "torso",
+    "leg"
+  ],
+  "token_share_prop": {
+    "head": 0.3265860281411997,
+    "antenna": 0.004196494692668477,
+    "arm": 0.3058504073068378,
+    "torso": 0.15082695630708468,
+    "leg": 0.21254011355220934
+  },
+  "changed_vs_legacy_voxels": 0.16791882134842423,
   "asset": "gen_robot_sem_d100k",
   "asset_share": {
-    "head": 0.3512197081538168,
-    "antenna": 3.0128649332650417e-05,
-    "arm": 0.21107127434143794,
-    "torso": 0.18067146716479368,
-    "leg": 0.25700742169061896
+    "head": 0.3611922910829241,
+    "antenna": 0.0013055748044148515,
+    "arm": 0.2034286402940556,
+    "torso": 0.16738473280909483,
+    "leg": 0.2666887610095106
+  },
+  "asset_counts": {
+    "head": 35965,
+    "antenna": 130,
+    "arm": 20256,
+    "torso": 16667,
+    "leg": 26555
   }
 }

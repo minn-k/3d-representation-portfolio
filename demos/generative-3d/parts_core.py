@@ -86,6 +86,32 @@ def dit_features(sem, blocks):
     return F / np.linalg.norm(F, axis=1, keepdims=True)
 
 
+def voxel_features(dec_feat, pca_dim=64, oversample=8):
+    """Decoder feature → standardized, low-rank, L2-normalized voxel descriptors.
+
+    A deterministic randomized PCA avoids building a very large dense
+    covariance matrix for the roughly 20–30k generated voxels.  These
+    descriptors are only a local similarity signal: named part labels still
+    come from the image projection.
+    """
+    X = np.asarray(dec_feat, np.float32)
+    if X.ndim != 2 or min(X.shape) == 0:
+        raise ValueError(f"decoder features must be a non-empty VxC array, got {X.shape}")
+    if not np.isfinite(X).all():
+        raise ValueError("decoder features contain NaN or Inf")
+    X = (X - X.mean(0, keepdims=True)) / (X.std(0, keepdims=True) + 1e-6)
+    n_comp = min(int(pca_dim), X.shape[0], X.shape[1])
+    if n_comp < 1:
+        raise ValueError(f"pca_dim must be positive, got {pca_dim}")
+    sketch_dim = min(min(X.shape), n_comp + max(int(oversample), 0))
+    rng = np.random.default_rng(0)
+    omega = rng.standard_normal((X.shape[1], sketch_dim)).astype(np.float32)
+    Q, _ = np.linalg.qr(X @ omega, mode="reduced")
+    _, _, Vh = np.linalg.svd(Q.T @ X, full_matrices=False)
+    F = X @ Vh[:n_comp].T
+    return F / np.maximum(np.linalg.norm(F, axis=1, keepdims=True), 1e-9)
+
+
 def voxel_colors(col, op, n_vox, per=32):
     """가우시안 색(복셀 순서, 복셀당 per 개) → 복셀 색 (불투명도 가중 평균)."""
     c = col[:n_vox * per].reshape(n_vox, per, 3)
@@ -444,6 +470,41 @@ def surface_graph(tc, F, radius=1.8, tau=0.1):
     return csr_matrix(Wm.multiply(1 / np.maximum(d, 1e-9)[:, None])), pairs
 
 
+def voxel_feature_graph(vox_coords, Fv, radius=1.8, tau=0.1):
+    """26-neighbour voxel graph weighted by decoder-feature cosine similarity."""
+    return surface_graph(np.asarray(vox_coords, np.float32), np.asarray(Fv, np.float32), radius=radius, tau=tau)
+
+
+def voxel_feature_votes(Fv, labels, K, tau=0.1):
+    """Named visible seeds → decoder-feature affinity probabilities.
+
+    This is deliberately not clustering: each prototype has the name already
+    assigned by a visible 2D image pixel.  A voxel only receives a soft vote
+    for the named seeds whose decoder feature it resembles.
+    """
+    Fv = np.asarray(Fv, np.float32)
+    labels = np.asarray(labels, np.int64)
+    if len(Fv) != len(labels):
+        raise ValueError("voxel features and labels must have the same length")
+    proto = np.zeros((K, Fv.shape[1]), np.float32)
+    count = np.zeros(K, np.int64)
+    for k in range(K):
+        m = labels == k
+        count[k] = int(m.sum())
+        if count[k]:
+            proto[k] = Fv[m].mean(0)
+    valid = count > 0
+    if not valid.any():
+        return np.full((len(Fv), K), 1.0 / K, np.float32), count
+    proto[valid] /= np.maximum(np.linalg.norm(proto[valid], axis=1, keepdims=True), 1e-9)
+    score = Fv @ proto.T
+    score[:, ~valid] = -np.inf
+    score = (score - np.max(score, axis=1, keepdims=True)) / max(float(tau), 1e-6)
+    prob = np.exp(np.clip(score, -80, 80))
+    prob /= np.maximum(prob.sum(1, keepdims=True), 1e-9)
+    return prob.astype(np.float32), count
+
+
 def propagate(P0, Wn, alpha, iters, clamp=None):
     """Y ← α·W·Y + (1−α)·P0, clamp 된 행은 매번 P0 로 되돌린다 (Zhou et al. / Zhu & Ghahramani)."""
     Y = P0.copy()
@@ -584,7 +645,9 @@ def soft_nearest(d, tau):
 def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vox_col=None,
          attn_blocks=(4, 8, 12), feat_blocks=(6, 12), knn=12, alpha=0.9, iters=None, radius=None,
          erode=2, gate_iou=0.7, gate_color=0.2, clamp_purity=0.75, w_attn_vis=0.25, cleanup=True, vox_refine=0.5,
-         geo=0.8, geo_power=2.0, geo_tau=0.3, core_tau=2.0, log=print):
+         geo=0.8, geo_power=2.0, geo_tau=0.3, core_tau=2.0,
+         vox_feat=None, vox_feat_alpha=0.5, vox_feat_iters=30, vox_feat_tau=0.1, vox_feat_pca=64,
+         vox_feat_vote=0.2, vox_feat_vote_tau=0.1, log=print):
     """→ dict: tok_prob (T,K) · tok_prob_attn · tok_part · vox_prob (V,K) · vox_part · vox_conf · v2t · (proj 이면)
     vox_visible · vox_proj_label · camera, 그리고 stats."""
     K = len(names)
@@ -595,6 +658,12 @@ def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vo
     F = dit_features(sem, feat_blocks)
     v2t = vox_to_tok(sem)
     T, V = len(tc), len(v2t)
+    if vox_feat is not None:
+        vox_feat = np.asarray(vox_feat, np.float32)
+        if vox_feat.ndim != 2 or vox_feat.shape[0] != V:
+            raise ValueError(f"vox_feat must have one row per voxel ({V}), got {vox_feat.shape}")
+        if not np.isfinite(vox_feat).all():
+            raise ValueError("vox_feat contains NaN or Inf")
     out = {"tok_prob_attn": S_attn.astype(np.float32), "v2t": v2t}
     st = {"mode": mode, "tokens": int(T), "voxels": int(V),
           "token_share_attn": {n: float(np.mean(S_attn.argmax(1) == k)) for k, n in enumerate(names)}}
@@ -635,6 +704,8 @@ def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vo
             Y = legacy()
             tok_part = Y.argmax(1)
             vox_prob = Y[v2t]
+            if vox_feat is not None and vox_feat_alpha > 0:
+                st["vox_feat"] = {"applied": False, "reason": "camera_fallback"}
         else:
             st["fallback_to_attn"] = False
             lab_v = projection_labels(u, vis, erode_labels(label2d, K, erode))
@@ -680,6 +751,41 @@ def lift(sem, label2d, names, *, mode="proj", alpha_mask=None, cond_rgb=None, vo
                     st["volumetric"] = {**vst, "seeds": {n: int(len(seeds[k])) for k, n in enumerate(names)},
                                         "voxels_changed": int((vox_prob[free].argmax(1) != before).sum()),
                                         "weight": geo, "power": geo_power}
+            # Decoder features have one row per 64³ voxel, unlike the 2³ voxel
+            # token features above.  Run this after the large hidden-side
+            # decision so it refines a boundary rather than replacing it.
+            if vox_feat is not None and vox_feat_alpha > 0:
+                Wv, vpairs_feat = voxel_feature_graph(sem["slat_coords"], vox_feat, tau=vox_feat_tau)
+                # lab_v was sampled from the eroded 2D mask, so every
+                # nonzero entry is a trusted visible seed at voxel resolution.
+                # Do not require its coarser 2³ token to be pure as well.
+                clamp_v = lab_v > 0
+                Pseed = vox_prob.copy()
+                Pseed[clamp_v] = np.eye(K)[lab_v[clamp_v] - 1]
+                before = vox_prob.argmax(1)
+                vox_prob = propagate(Pseed, Wv, vox_feat_alpha, vox_feat_iters, clamp_v)
+                # The graph says whether neighbouring voxels should exchange
+                # information.  The following weak unary vote says which of
+                # the *named visible seeds* a voxel resembles.  It avoids
+                # treating decoder features as an unsupervised part classifier.
+                seed_count = np.zeros(K, np.int64)
+                if vox_feat_vote > 0:
+                    Pv, seed_count = voxel_feature_votes(vox_feat, lab_v - 1, K, tau=vox_feat_vote_tau)
+                    vox_prob = (1 - vox_feat_vote) * vox_prob + vox_feat_vote * Pv
+                    vox_prob[clamp_v] = np.eye(K)[lab_v[clamp_v] - 1]
+                    vox_prob /= np.maximum(vox_prob.sum(1, keepdims=True), 1e-9)
+                after = vox_prob.argmax(1)
+                changed = after != before
+                st["vox_feat"] = {
+                    "applied": True, "alpha": float(vox_feat_alpha), "iters": int(vox_feat_iters),
+                    "tau": float(vox_feat_tau), "pca_dim": int(vox_feat_pca),
+                    "vote": float(vox_feat_vote), "vote_tau": float(vox_feat_vote_tau),
+                    "seed_count": {n: int(seed_count[k]) for k, n in enumerate(names)},
+                    "feature_dim": int(vox_feat.shape[1]), "edges": int(len(vpairs_feat)),
+                    "voxels_changed": int(changed.sum()), "changed_fraction": float(changed.mean()),
+                    "changed_visible": int((changed & vis).sum()), "changed_hidden": int((changed & ~vis).sum()),
+                    "clamped_visible": int(clamp_v.sum()),
+                }
             if cleanup:                                             # 복셀 단위 작은 조각 (투영 · 부피 단계의 점 잡음)
                 vpairs = cKDTree(sem["slat_coords"].astype(np.float32)).query_pairs(r=1.8, output_type="ndarray")
                 vlab, vch = cleanup_fragments(vox_prob.argmax(1), vpairs, K, min_size=48)

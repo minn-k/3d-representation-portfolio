@@ -7,6 +7,7 @@ SLat 생성 트랜스포머(SLatFlowModel, 24 블록, 토큰 = 64³ 복셀을 2�
      조건 있는 호출만 (CFG 음성 조건은 0 이라 제외), 지정한 스텝 범위 평균. 블록별로 따로.
   ② DiT 중간층 특징: 지정한 블록 출력 (1024 차원), 같은 스텝 범위 평균.
   ③ 최종 SLat (64³ 복셀, 8 차원) — Gaussian 디코더 입력.
+  ④ --dec-feat 일 때 Gaussian decoder의 out_layer 직전 64³ 복셀 특징(기본은 저장하지 않음).
 출력 out/<name>/: gaussian.ply, cond.png, sem.npz (tok_coords, attn_<b>, feat_<b>, slat_coords, slat_feats, gs_xyz_internal),
                   stats.json, turntable.mp4
 """
@@ -86,6 +87,8 @@ def main():
     ap.add_argument("--steps", type=int, default=25)
     ap.add_argument("--rec-from", type=int, default=8, help="이 스텝부터")
     ap.add_argument("--rec-to", type=int, default=20, help="이 스텝까지 기록 (포함)")
+    ap.add_argument("--dec-feat", action="store_true",
+                    help="Gaussian decoder out_layer 직전 복셀 특징을 dec_feat.npz 로 함께 저장한다")
     args = ap.parse_args()
     out = os.path.join(HERE, "out", args.name)
     os.makedirs(out, exist_ok=True)
@@ -134,7 +137,19 @@ def main():
     torch.manual_seed(args.seed)
     coords = pipe.sample_sparse_structure(cond, 1, {"steps": args.steps, "cfg_strength": 7.5})
     slat = pipe.sample_slat(cond, coords, {"steps": args.steps, "cfg_strength": 3.0})
-    outs = pipe.decode_slat(slat, ["gaussian"])
+    dec_capture, dec_hook = {}, None
+    decoder = pipe.models["slat_decoder_gs"]
+    if args.dec_feat:
+        def pre_out_layer(_module, inputs):
+            h = inputs[0]
+            dec_capture["coords"] = h.coords.detach().cpu().numpy().copy()
+            dec_capture["feat"] = h.feats.detach().float().cpu().numpy().copy()
+        dec_hook = decoder.out_layer.register_forward_pre_hook(pre_out_layer)
+    try:
+        outs = pipe.decode_slat(slat, ["gaussian"])
+    finally:
+        if dec_hook is not None:
+            dec_hook.remove()
     dt = time.time() - t0
     g = outs["gaussian"][0]
     g.save_ply(os.path.join(out, "gaussian.ply"))
@@ -148,13 +163,21 @@ def main():
     for b, f in R.feat.items():
         sem[f"feat_{b}"] = (f / R.n[("f", b)]).cpu().numpy().astype(np.float16)
     np.savez_compressed(os.path.join(out, "sem.npz"), **sem)
+    dec_meta = None
+    if args.dec_feat:
+        if "coords" not in dec_capture or "feat" not in dec_capture:
+            raise RuntimeError("Gaussian decoder feature hook did not run")
+        from dec_features import save_features, validate_capture
+        dec_meta = validate_capture(sem, decoder, dec_capture["coords"], dec_capture["feat"], g)
+        save_features(os.path.join(out, "dec_feat.npz"), dec_capture["coords"][:, 1:].astype(np.int16),
+                      dec_capture["feat"].astype(np.float16), dec_meta)
 
     frames = render_utils.render_video(g, resolution=512, num_frames=120, bg_color=(1, 1, 1))["color"]
     imageio.mimsave(os.path.join(out, "turntable.mp4"), frames, fps=30, quality=8)
     st = {"name": args.name, "image": os.path.abspath(args.image), "seed": args.seed, "gaussians": int(g.get_xyz.shape[0]),
           "voxels": int(slat.coords.shape[0]), "tokens": int(len(R.tok_coords)), "generate_s": round(dt, 1),
           "recorded_steps": [args.rec_from, args.rec_to], "attn_blocks": ATTN_BLOCKS, "feat_blocks": FEAT_BLOCKS,
-          "attn_calls": {str(k[1]): v for k, v in R.n.items() if k[0] == "a"}}
+          "attn_calls": {str(k[1]): v for k, v in R.n.items() if k[0] == "a"}, "decoder_features": dec_meta}
     json.dump(st, open(os.path.join(out, "stats.json"), "w"), indent=2)
     print("[sem]", json.dumps(st), flush=True)
 
