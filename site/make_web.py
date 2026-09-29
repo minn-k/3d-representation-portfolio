@@ -119,6 +119,8 @@ def build_media():
         first_frame(os.path.join(A, f"{n}_parts.mp4"), os.path.join(A, f"{n}_parts.jpg"))
         poster(os.path.join(d, "parts2d.png"), os.path.join(A, f"{n}_parts2d.jpg"), 520)
         poster(os.path.join(d, "parts3d_grid.png"), os.path.join(A, f"{n}_parts3d_grid.jpg"), 1024)
+        if os.path.exists(os.path.join(d, "parts3d_vox_feat_diff.png")):
+            poster(os.path.join(d, "parts3d_vox_feat_diff.png"), os.path.join(A, f"{n}_vox_feat_diff.jpg"), 1400)
         if os.path.exists(os.path.join(d, "camera_fit.png")):                 # lift_parts.py --mode proj
             poster(os.path.join(d, "camera_fit.png"), os.path.join(A, f"{n}_camera_fit.jpg"), 1400)
     sv = os.path.join(GEN, "semantic_shake", "robot_b.mp4")
@@ -213,27 +215,39 @@ def sem_section():
         return jl(p) if os.path.exists(p) else None
     sh = jl(os.path.join(GEN, "semantic_shake", "robot_b.json"))
     wu, ws = sh["wobble_rms_cm"]["uniform"], sh["wobble_rms_cm"]["semantic"]
-    counts = {n: int(v) for n, v in zip(["head", "antenna", "arm", "torso", "leg"],
-                                         np.bincount(np.load(os.path.join(GEN, "robot_sem", "parts3d.npz"))["asset_part"]))}
+    def labels_and_stats(name):
+        z = np.load(os.path.join(GEN, name, "parts3d.npz"))
+        names = [str(x) for x in z["names"]]
+        part = z["asset_part"].astype(np.int64)
+        counts = {n: int((part == i).sum()) for i, n in enumerate(names)}
+        return names, part, counts, jl(os.path.join(GEN, name, "parts3d_stats.json"))
+
+    rnames, rpart, rcounts, rst = labels_and_stats("robot_sem")
+    bnames, bpart, bcounts, bst = labels_and_stats("bear_sem")
+    bfeat, rfeat = bst.get("vox_feat", {}), rst.get("vox_feat", {})
+    bvoxels = bfeat.get("decoder", {}).get("voxels", 0)
+    bbody = 100.0 * bcounts.get("body", 0) / max(len(bpart), 1)
     return f"""
 <section id="semantic">
   <div class="wrap">
     <p class="eyebrow">NEW · 생성 과정의 의미 정보 → 가우시안 부위 → 물리 편집</p>
     <h2>가우시안마다 '어느 부위인지' 를 — 생성 모델 안에서 꺼내서</h2>
     <p class="sub">원본 3DGS 의 가우시안은 자기가 머리인지 팔인지 모른다 — 색을 맞춘 결과일 뿐이다. TRELLIS 는 3D 복셀을 만들 때
-      <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>와 <b>부위 구조가 담긴 중간 특징(DiT)</b>을 거친다. 이 신호를 생성 도중에 꺼내고
-      입력 사진의 카메라를 추정해, 사진에 보이는 곳은 사진의 부위 이름을, 가려진 곳은 부피를 따라 3D 로 옮겼다. 결과: <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (PLY 속성으로 내보냄 ·
-      로봇 10만 개 (1차 방법) = 머리 {counts['head']:,} · 팔 {counts['arm']:,} · 몸통 {counts['torso']:,} · 다리 {counts['leg']:,}).</p>
+      <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>, <b>DiT 중간 특징</b>, 그리고 Gaussian decoder의 복셀 특징을 거친다.
+      입력 사진의 카메라를 추정해 보이는 곳은 2D 부위 이름을 고정하고, 가려진 곳은 부피를 따라 채운 뒤, decoder 특징은 <b>경계 보정에만</b>
+      사용했다. 결과: <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (PLY 속성으로 내보냄 · 로봇 {len(rpart):,}개 =
+      머리 {rcounts['head']:,} · 팔 {rcounts['arm']:,} · 몸통 {rcounts['torso']:,} · 다리 {rcounts['leg']:,}).</p>
     <ol class="pipe">
       <li><span class="tag gen">2D</span><b>입력 이미지의 부위 이름</b><small>Grounding DINO + SAM</small></li>
-      <li><span class="tag mine">생성 중간</span><b>attention 투표</b><small>SLat 트랜스포머 블록 4·8·12 · 토큰 → 이미지 패치</small></li>
+      <li><span class="tag mine">생성 중간</span><b>attention · DiT 신호</b><small>SLat 트랜스포머 · 토큰 → 이미지 패치</small></li>
       <li><span class="tag mine">카메라</span><b>보이는 복셀만 2D 투영</b><small>attention + 실루엣으로 입력 시점 추정 · z-buffer</small></li>
-      <li><span class="tag mine">가려진 쪽</span><b>부피 기준 + DiT 특징</b><small>어느 부위의 속에 붙어 있나 · 특징 전파</small></li>
-      <li><span class="tag mine">결과</span><b>part_id → 부위별 물성</b><small>가우시안 i → 복셀 i//32 · 강체 + 연체 XPBD</small></li>
+      <li><span class="tag mine">가려진 쪽</span><b>부피 기준</b><small>어느 부위의 속에 붙어 있나 · 얇은 연결은 비싸게</small></li>
+      <li><span class="tag mine">경계 보정</span><b>decoder 복셀 특징</b><small>visible seed는 고정 · 26-이웃 graph에서만 보정</small></li>
+      <li><span class="tag mine">결과</span><b>part_id → 제약 topology</b><small>가우시안 i → 복셀 i//32 · part-bounded XPBD</small></li>
     </ol>
     <div class="row2">
-      {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 (1차 방법) — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (뒷면 포함, 입력 사진에 없던 쪽)", True)}
-      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 왼쪽 생성 결과 · 오른쪽 가우시안 part_id (아래 시행착오의 3차 결과)", True)}
+      {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 — 최신 카메라 탐색 · 부피 기준 · decoder 특징 경계 보정 결과", True)}
+      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 최신 4차 결과: 보이는 seed 고정 · 부피 기준 가려진 쪽 · decoder 특징 경계 보정", True)}
     </div>
 
     <h3>그래서 무엇이 달라지나 — 부위마다 다른 물성</h3>
@@ -251,9 +265,9 @@ def sem_section():
       의미 부위: part_id 가 팔이 아닌 가우시안(몸통 · 머리 · 다리)은 강체로 받침과 함께 움직이고, 팔 가우시안만 간선 강성 {sh['soft_stiff']} ·
       형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계.</p>
 
-    <h3>분류는 어떻게 다듬었나 — 곰 인형에서의 시행착오</h3>
+    <h3>분류는 어떻게 다듬었나 — 곰 인형에서의 4단계 개선</h3>
     <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (좌표 k-means 는 머리와 몸을 가로질러 자르고, 특징 k-means 는 무늬로 묶는다).
-      그래서 생성 모델이 입력 사진의 어디를 보는지(attention)에서 출발했고, 털 질감이 고른 곰 인형에서 부위가 섞이는 문제를 세 번에 걸쳐 고쳤다.
+      그래서 생성 모델이 입력 사진의 어디를 보는지(attention)에서 출발했고, 털 질감이 고른 곰 인형에서 부위가 섞이는 문제를 네 단계에 걸쳐 고쳤다.
       각 줄은 같은 곰의 part_id 를 정면 · 옆 · 뒤 · 반대 옆에서 본 것.</p>
     <figure class="media"><img src="assets/bear_parts_try1.jpg" alt="1차 — attention 투표 + DiT 특징 전파" loading="lazy">
       <figcaption><b>1차 · attention 투표 + DiT 특징 전파</b> — 오른팔 안쪽에 머리 라벨이 띠처럼 섞이고 다리에 머리 점이 생겼다.
@@ -270,25 +284,31 @@ def sem_section():
       <figcaption><b>3차 · 가려진 쪽은 '어느 부위의 속(부피)에 붙어 있나' 로</b> — 복셀 껍질을 속이 찬 부피로 채우고, 표면마다 깊이를 따라
         닿는 부위의 속과 부피 안 거리(두꺼운 속은 싸고, 팔 · 몸통이 맞닿은 얇은 목은 비싸게)로 정했다. 등과 꼬리는 배와 같은
         몸통 속에 닿으므로 몸통으로 돌아왔다. 뒷머리 · 목 뒤에는 팔 라벨이 아직 조금 섞인다.</figcaption></figure>
+    <figure class="media"><img src="assets/bear_sem_vox_feat_diff.jpg" alt="4차 decoder 복셀 특징으로 바뀐 위치" loading="lazy">
+      <figcaption><b>4차 · decoder 복셀 특징으로 경계만 보정</b> — Gaussian decoder의 마지막 출력 직전 768차원 voxel feature를
+        64차원으로 줄여 26-이웃 graph에서만 썼다. 보이는 2D seed는 바꾸지 않고, 이름 없는 feature clustering도 하지 않는다.
+        곰에서는 {bfeat.get('voxels_changed', 0):,} / {bvoxels:,} voxel이 바뀌었고 (보이는 쪽 {bfeat.get('changed_visible', 0):,},
+        가려진 쪽 {bfeat.get('changed_hidden', 0):,}), 그림의 색 점만 달라진 위치다.</figcaption></figure>
     <div class="table-wrap"><table class="metrics">
       <tr><th rowspan="2">부위 분류 정확도<br><small>정답과 같은 부위로 분류된 복셀의 비율<br>높을수록 좋음 · 100% = 전부 맞음</small></th><th colspan="2">표면 위치별</th><th colspan="2">부위별</th></tr>
       <tr><th>사진에 보이는 면</th><th>가려진 면 (옆 · 뒤)</th><th>팔</th><th>몸통</th></tr>
       <tr><td>1차 · attention + 특징 전파</td><td>85%</td><td>73%</td><td>91%</td><td>0%</td></tr>
       <tr><td>2차 · + 카메라 추정 · 보이는 복셀 투영</td><td><b>98%</b></td><td>77%</td><td>96%</td><td>25%</td></tr>
       <tr><td>3차 · + 가려진 쪽은 부피 기준</td><td><b>98%</b></td><td><b>85%</b></td><td><b>98%</b></td><td><b>48%</b></td></tr>
+      <tr><td>4차 · + decoder 특징 경계 보정</td><td><b>98%</b></td><td><b>87%</b></td><td><b>99%</b></td><td><b>52%</b></td></tr>
     </table></div>
     <p class="note">실제 곰에는 정답 라벨이 없어 정확도를 잴 수 없다. 그래서 부위 정답을 아는 <b>합성 곰</b>(구 · 타원체 · 캡슐로 만든 곰 모양에
       알려진 카메라로 2D 부위와 잡음 섞인 attention 을 만든 시험, 저장소 tests/test_parts_core.py)의 복셀 8,336개를 정답과 비교했다.
-      실제 곰에서는 몸통으로 분류된 가우시안이 11.6% → 15.0% → 25.2% 로 늘어, 옆 · 뒤가 몸통으로 돌아온 것을 수치로도 확인했다.
-      몸통이 아직 가장 낮은 것은 사진에서 몸통 라벨이 배에만 있어서다 — 합성 곰에서 옆구리까지 라벨이 있으면 48% → 82%.</p>
+      4차는 전체 정확도 88.57% → <b>90.26%</b>, 경계 정확도 76.25% → <b>79.95%</b>로 올랐다. 실제 곰에서는 몸통 비율이
+      11.6% → 15.0% → 25.2% → {bbody:.2f}%로, 3차에서 옆 · 뒤가 몸통으로 돌아온 효과가 유지됐다. 4차는 전체 비율을 크게 바꾸는 단계가 아니라
+      경계를 다듬는 단계다.</p>
 
     <h3>최종 분류 결과 — 두 에셋, 네 방향</h3>
     <p class="note">열: 정면 · 옆 · 뒤 · 반대 옆.
-      <b>곰 인형은 3차 방법</b>의 결과다. 행: 원래 색 · attention 투표만 · 1차 결과 · 2차의 투영 투표 (사진에 보이는 복셀만,
-      회색 = 모름) · 3차 최종.
-      <b>안내 로봇은 1차 방법</b>의 결과다. attention 만으로 잡은 입력 카메라가 어긋나 (실루엣 일치 0.69) 안전장치가 1차 방식으로
-      되돌렸다. 그 뒤 카메라를 여러 방향에서 찾도록 고쳤고 합성 곰에서는 attention 없이도 카메라를 찾지만, 로봇은 아직 다시 돌리지 않았다.
-      로봇의 행: 원래 색 · attention 투표만 · 1차 결과 · 기준선 두 가지 (DiT 특징 k-means · 좌표 k-means — 부위 이름이 없고 부위를 가로질러 자른다).</p>
+      <b>곰과 안내 로봇 모두 4차 방법</b>의 결과다. 행: 원래 색 · attention 투표만 · 예전 1차 결과 · 2차의 투영 투표
+      (사진에 보이는 복셀만, 회색 = 모름) · 4차 최종. 로봇은 global search가 attention 초기화 실패를 피해서
+      실루엣 IoU {rst['camera']['silhouette_iou']:.3f}, visible colour correlation {rst['camera']['color_corr_visible']:.3f}로 카메라를 맞췄고,
+      attention fallback 없이 decoder 특징 보정을 적용했다. 기준선 행은 부위 이름이 없는 k-means라 실제 part_id 대안이 아니다.</p>
     <div class="row2">
       {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
       {img("bear_sem_parts3d_grid.jpg", "곰 인형")}
@@ -298,8 +318,9 @@ def sem_section():
       <b>정직한 결과와 다음 단계</b>
       <ul>
         <li>사진에 보이는 쪽은 2D 부위를 그대로 따르지만 가려진 쪽은 부피로 추정한 것이라, 곰 뒷머리처럼 조금 섞인다. 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
-        <li>'단단한 부위' 는 지금 강체로 처리했다 — 솔버의 형상 유지가 물체 전체 하나의 강체 맞춤뿐이라, 연체 안에서 부위마다 다른 강성
-          (예: 몸통은 조금만 출렁)은 아직 표현하지 못한다. <b>부위 단위 강체 맞춤을 솔버에 넣는 것</b>, 부위 → 재질 → 물성 자동 연결이 다음 단계.</li>
+        <li>현재 로컬 runtime에는 `(graph component, part)`별 shape matching과 part 경계를 넘지 않는 volume cluster가 있다.
+          실제 곰 99,999개에서 5개 part shape group, cross-label volume cluster 0개를 확인했다. 다만 재질 · mass · damping을
+          part 이름에서 자동으로 정하거나, simulation 품질·속도를 정량 비교하는 일은 다음 단계다.</li>
       </ul>
     </div>
   </div>
@@ -474,10 +495,10 @@ def page(rows):
 
 <section id="next">
   <div class="wrap">
-    <p class="eyebrow">하고 싶은 연구 (계획)</p>
+    <p class="eyebrow">현재 구현 · 다음 연구</p>
     <h2>생성된 3D 가 바로 쓰이는 공간 컨텐츠가 되도록</h2>
     <div class="cards3">
-      <div class="card"><span class="k">구조를 아는 생성</span><p>생성 단계에서 파트 · 연결 · 재질을 함께 내놓아, 생성 직후 물체 단위로 편집 · 변형 · 애니메이션.</p></div>
+      <div class="card"><span class="k">생성 단서를 보존하는 표현</span><p><b>구현:</b> decoder 출력 직전의 복셀 특징을 부위 경계 보정에 보존하고, 정해진 part_id를 XPBD의 부피 제약과 형상 그룹에 전달했다. 아직 생성 모델이 부위·재질 이름을 직접 예측하는 단계는 아니다.</p></div>
       <div class="card"><span class="k">편집 가능한 생성 표현</span><p>생성 가우시안의 개수 · 크기를 용도(렌더 / 물리 / 모바일 AR)에 맞게 조절하는 표현과 LOD.</p></div>
       <div class="card"><span class="k">사용자가 조종하는 저작</span><p>텍스트 · 스케치 · 드래그로 공간 컨텐츠를 만들고 고치는 도구 — 실제 공간 스캔과 생성 에셋을 한 장면에서.</p></div>
     </div>
