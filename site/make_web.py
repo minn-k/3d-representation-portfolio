@@ -43,9 +43,10 @@ def jl(p):
         return json.load(f)
 
 
-def enc(src, dst, scale_w=None):
-    """H.264 yuv420p + faststart (웹 재생용)."""
-    vf = ["-vf", f"scale={scale_w}:-2"] if scale_w else []
+def enc(src, dst, scale_w=None, crop_top=0):
+    """H.264 yuv420p + faststart (웹 재생용). crop_top: 위쪽을 잘라낼 픽셀 (영상 안 제목 글자)."""
+    f = ([f"crop=iw:ih-{crop_top}:0:{crop_top}"] if crop_top else []) + ([f"scale={scale_w}:-2"] if scale_w else [])
+    vf = ["-vf", ",".join(f)] if f else []
     subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", src, *vf, "-c:v", "libx264", "-pix_fmt", "yuv420p",
                     "-crf", "23", "-preset", "slow", "-movflags", "+faststart", "-an", dst], check=True)
 
@@ -146,7 +147,7 @@ def build_media():
             poster(os.path.join(d, "camera_fit.png"), os.path.join(A, f"{n}_camera_fit.jpg"), 1400)
     pv = os.path.join(GEN, "part_shake", "robot_part2_stiff.mp4")
     if os.path.exists(pv):                                            # 부위를 아는 솔버 흔들기 (part_shake.py)
-        enc(pv, os.path.join(A, "robot_part_shake.mp4"))
+        enc(pv, os.path.join(A, "robot_part_shake.mp4"), crop_top=90)          # 영상 안 제목은 표와 캡션이 대신한다
         first_frame(os.path.join(A, "robot_part_shake.mp4"), os.path.join(A, "robot_part_shake.jpg"), 1.0)
     return rows
 
