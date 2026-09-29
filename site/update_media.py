@@ -4,7 +4,7 @@ r"""사이트 영상 하나 바꾸기: 아무 영상 → site/assets/<이름>.mp
   python site/update_media.py "C:\Users\OMEN PC1\Downloads\bear.mp4" gen_bear_edit --width 1280
   python site/update_media.py "C:\Users\OMEN PC1\Downloads\plant.mp4" gen_plant_edit --width 1280 --start 2 --seconds 10
   python site/update_media.py demos/generative-3d/out/letters/letters_drop.mp4 letters_drop --poster-t 4
-  python site/update_media.py demos/generative-3d/out/part_shake/robot_part2_stiff.mp4 robot_part_shake --crop-top 90 --poster-t 1
+  python site/update_media.py demos/generative-3d/out/part_shake/robot_part2_stiff.mp4 robot_part_shake --crop-top 90 --crop-bottom 100 --poster-t 1
 
 ffmpeg: imageio-ffmpeg 가 있으면 그 실행 파일, 없으면 PATH 의 ffmpeg.
 """
@@ -37,6 +37,7 @@ def main():
     ap.add_argument("--seconds", type=float, default=0.0, help="이 길이[s]만 남기기 (0 = 끝까지)")
     ap.add_argument("--crf", type=int, default=23, help="화질 (낮을수록 좋고 파일이 커진다)")
     ap.add_argument("--crop-top", type=int, default=0, help="위쪽을 이 픽셀만큼 잘라낸다 (영상 안 제목 글자 등)")
+    ap.add_argument("--crop-bottom", type=int, default=0, help="아래쪽을 이 픽셀만큼 잘라낸다 (영상 안 상태 글자 등)")
     ap.add_argument("--poster-t", type=float, default=0.0, help="포스터로 쓸 시각 [s] (letters_drop 은 4)")
     args = ap.parse_args()
     if not os.path.isfile(args.src):
@@ -45,7 +46,8 @@ def main():
     dst = os.path.join(ASSETS, f"{args.name}.mp4")
     if not os.path.exists(dst):
         print(f"[media] 새 이름 {args.name}.mp4 — index.html 에 이 이름을 쓰는 곳이 있는지 확인할 것")
-    crop = f"crop=iw:ih-{args.crop_top}:0:{args.crop_top}," if args.crop_top else ""
+    cut_h = args.crop_top + args.crop_bottom
+    crop = f"crop=iw:ih-{cut_h}:0:{args.crop_top}," if cut_h else ""
     vf = ["-vf", crop + (f"scale='min({args.width},iw)':-2" if args.width else "scale=trunc(iw/2)*2:trunc(ih/2)*2")]
     cut = (["-ss", f"{args.start:.3f}"] if args.start else []) + (["-t", f"{args.seconds:.3f}"] if args.seconds else [])
     tmp = dst + ".tmp.mp4"

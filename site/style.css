@@ -136,7 +136,7 @@ figure.media img, figure.media video {
 figcaption { font-size: 13px; color: var(--ink3); margin-top: 6px; }
 
 .steps3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 24px 0; }
-.step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; }
+.step { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; min-width: 0; }
 .step .n { font-weight: 800; color: var(--accent); font-size: 13px; }
 .step p { color: var(--ink2); font-size: 15px; margin: 6px 0 0; }
 .eq { font-family: "Cambria Math", "STIX Two Math", serif; font-size: 14px !important; background: var(--bg); border-radius: 8px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; }
