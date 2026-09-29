@@ -37,14 +37,44 @@ def std_vertices(v):
 
 
 def write_model(run, el, source):
-    """SIBR 뷰어가 여는 모델 폴더 (to_model.py 와 같은 형식)."""
+    """SIBR 뷰어가 여는 self-contained 모델 폴더를 쓴다.
+
+    Gaussian viewer는 point_cloud PLY 외에도 APG graph / proxy 초기화용 일반
+    ``input.ply``를 찾는다. 이것이 없으면 splat은 로드해도 graph 입력은 0개가 된다.
+    """
     from to_model import orbit_cameras
     pc = os.path.join(run, "point_cloud", "iteration_1")
     os.makedirs(pc, exist_ok=True)
     PlyData([PlyElement.describe(el, "vertex")]).write(os.path.join(pc, "point_cloud.ply"))
+    # 3DGS property layout과 별개인, SIBR scene parser용 최소 point cloud.
+    proxy = np.zeros(len(el), dtype=[("x", "f4"), ("y", "f4"), ("z", "f4"),
+                                     ("nx", "f4"), ("ny", "f4"), ("nz", "f4"),
+                                     ("red", "u1"), ("green", "u1"), ("blue", "u1")])
+    for axis in ("x", "y", "z"):
+        proxy[axis] = el[axis]
+    proxy["red"], proxy["green"], proxy["blue"] = 127, 127, 127
+    PlyData([PlyElement.describe(proxy, "vertex")]).write(os.path.join(run, "input.ply"))
     json.dump(orbit_cameras(), open(os.path.join(run, "cameras.json"), "w"))
+    # This viewer build always loads an APG graph config. Its global default contains
+    # another experiment's crop box, which can remove every generated Gaussian. Keep a
+    # per-model config beside the model and derive a padded crop from the exported data.
+    xyz = np.column_stack([el["x"], el["y"], el["z"]]).astype(np.float32)
+    lo, hi = xyz.min(0), xyz.max(0)
+    pad = max(0.01, 0.05 * float(np.linalg.norm(hi - lo)))
+    viewer_cfg = {
+        "experiment_name": "generated_part_physics",
+        "dataset_name": os.path.basename(run),
+        "crop_min": (lo - pad).round(6).tolist(),
+        "crop_max": (hi + pad).round(6).tolist(),
+        "w_dist": 2.9, "w_ori": 0.5, "w_shape": 0.4, "w_sh": 0.5,
+        "d_thresholdP": 85.0, "default_k": 16, "graph_mode": 1,
+        "sem_gate_enable": 0, "graph_target_deg": 16, "graph_len_cap": 4.0,
+    }
+    with open(os.path.join(run, "viewer_config.json"), "w", encoding="utf-8") as f:
+        json.dump(viewer_cfg, f, indent=2)
     with open(os.path.join(run, "cfg_args"), "w") as f:
-        f.write(f"Namespace(sh_degree=3, source_path='{source}', model_path='{run}', images='images', resolution=-1, "
+        # The generated folder carries its own input.ply, so it stays openable after moving it.
+        f.write(f"Namespace(sh_degree=3, source_path='{run}', model_path='{run}', images='images', resolution=-1, "
                 f"white_background=True, data_device='cuda', eval=False)")
 
 

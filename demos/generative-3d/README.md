@@ -158,6 +158,7 @@ Open that generated model with the local SIBR viewer:
 cd C:\gaussian-splatting\SIBR_viewers\install\bin
 .\SIBR_gaussianViewer_app.exe `
   --model-path C:\gaussian-splatting\output_1\gen_bear_sem_part_physics_v2 `
+  --config C:\gaussian-splatting\output_1\gen_bear_sem_part_physics_v2\viewer_config.json `
   --iteration 1 --device 0 --no_interop
 ```
 
