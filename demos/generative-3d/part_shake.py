@@ -108,6 +108,8 @@ def main():
     ap.add_argument("--soft-shape", type=float, default=0.05, help="오른쪽: 말랑한 부위 조각 형상 유지")
     ap.add_argument("--blend-hops", type=int, default=6, help="오른쪽: 경계에서 간선 강성을 섞는 횟수")
     ap.add_argument("--min-piece", type=int, default=200, help="이보다 작은 부위 조각은 이웃 조각에 붙인다")
+    ap.add_argument("--blend-shape", action="store_true",
+                    help="경계 띠에서 두 형상 그룹의 목표를 섞는다 (set_part_blend 가 있는 DLL 필요, --groups soft 전용)")
     ap.add_argument("--groups", default="soft", choices=["soft", "all"],
                     help="soft = 말랑한 부위 조각만 따로 형상 그룹, 몸은 한 그룹 · all = 모든 부위 조각이 따로")
     ap.add_argument("--no-part-shape", action="store_true", help="비교용: 오른쪽 형상 유지를 물체 하나로")
@@ -176,6 +178,26 @@ def main():
         group_ids = piece
         group_shape = np.where(soft_piece, args.soft_shape, args.body_shape).astype(np.float32)
     body = ~soft
+    blend = None
+    if args.blend_shape:
+        # 겹치는 형상 영역 (lattice shape matching 식): 경계 띠의 입자는 자기 그룹 A 와 건너편 그룹 B 의 목표를 섞는다.
+        # 팔 조각마다 지시값을 그래프 이웃 평균으로 번지게 해 w_p (조각 안 1 → 몸 쪽으로 0) 를 만든다.
+        if args.groups != "soft":
+            ap.error("--blend-shape 는 --groups soft 에서만 쓴다")
+        soft_p = np.nonzero(soft_piece)[0]
+        Wp = np.stack([graph_blend((piece == p).astype(np.float64), e, args.blend_hops) for p in soft_p], 1)
+        near = Wp.argmax(1)
+        ga = group_ids.astype(np.int32).copy()
+        gb = np.where(soft, 0, gid[soft_p[near]]).astype(np.int32)          # 팔 → 몸 (0), 몸 → 가장 가까운 팔
+        col = np.zeros(len(piece_part), np.int64)
+        col[soft_p] = np.arange(len(soft_p))                              # 팔 조각 → Wp 의 열
+        own = Wp[np.arange(len(Wp)), col[piece]]
+        wb = np.where(soft, 1.0 - own, Wp.max(1))                          # 팔: 몸 쪽 비율 · 몸: 가까운 팔 비율
+        wb = np.clip(np.where(wb < 1e-3, 0.0, wb), 0.0, 0.5).astype(np.float32)   # 경계에서 반반까지만
+        gb = np.where(wb > 0, gb, ga).astype(np.int32)
+        blend = (ga, gb, wb)
+        print(f"[part_shake] shape blend band: {int((wb > 0).sum()):,} Gaussians (mean weight {wb[wb > 0].mean():.2f})"
+              if (wb > 0).any() else "[part_shake] shape blend band: empty", flush=True)
 
     def soft_rel_body(P):
         """말랑한 가우시안이 몸의 강체 운동을 뺀 뒤 쉬는 자세에서 벗어난 평균 거리 (원본 단위)."""
@@ -212,6 +234,10 @@ def main():
             sim.set_part_ids(np.ascontiguousarray(group_ids.astype(np.int32)), restrict_volume=not args.no_part_volume,
                              shape_groups=not args.no_part_shape)
             sim.set_part_shape(np.ascontiguousarray(group_shape))
+            if blend is not None:
+                if not hasattr(sim, "set_part_blend"):
+                    raise RuntimeError("이 DLL/xpbd.py 에 set_part_blend 가 없다 (경계 형상 섞기는 런타임 수정 필요)")
+                sim.set_part_blend(*(np.ascontiguousarray(x) for x in blend))
         sim.set_ground(False, (0, 0, 1), 0.0, gravity=0.0)
         sim.step()
         sim.reset()
@@ -286,7 +312,7 @@ def main():
     rms = lambda v: round(float(np.sqrt(np.mean(np.square(v)))), 3)  # noqa: E731
     st = {k_: getattr(args, k_) for k_ in ("asset", "soft", "axis", "compliance", "uniform_stiff", "uniform_shape", "body_stiff",
                                             "body_shape", "soft_stiff", "soft_shape", "blend_hops", "min_piece",
-                                            "groups", "no_part_shape", "no_part_volume", "no_edge_ramp", "pin_h", "amp", "freq",
+                                            "groups", "blend_shape", "no_part_shape", "no_part_volume", "no_edge_ramp", "pin_h", "amp", "freq",
                                             "shake_s", "seconds", "damping")}
     st.update({
         "dll": os.path.basename(src), "pieces": pieces, "boundary_edges": int(cross.sum()),
