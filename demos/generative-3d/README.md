@@ -9,15 +9,15 @@ Scripts, TRELLIS patches, and measured results behind the portfolio page. Instal
 |---|---|---|
 | Text → image | `gen2d.py` (SDXL-Turbo, 2 steps, 512²) | `text2img_s<seed>.png`, `text2img.json` |
 | Image → 3D Gaussians | `gen3d.py` (TRELLIS-image-large, 25 + 25 steps) | `gaussian.ply`, `turntable.mp4`, `cond.png`, `stats.json` |
-| … with generation signals | `gen3d_sem.py` | the above + `sem.npz` (attention, DiT features, SLat) |
+| … with generation signals | `gen3d_sem.py` | the above + `sem.npz` (attention, DiT features, SLat); `--dec-feat` additionally writes `dec_feat.npz` |
 | Count reduction | `distill.py` (importance selection + re-fit, Adam, L1, 3000 its) | `distill_<N>k.ply`, `distill_<N>k.json` |
 | 3DGS model folder | `to_model.py` (SH 3, opacity ≥ 0.02, `-y` up, orbit cameras) | `$APG_ROOT/output_1/gen_<name>/` |
 | APG graph | `prepare_gen.py` (crop → SIBR headless graph export → PLY order), `graph_stats.py` | `$APG_RUNTIME_ROOT/gen_<name>/`, `graph.json` |
 | Editing | `edit_demo.py` (pin bottom, pull a tip, XPBD, Σ′ = FΣ₀Fᵀ) | `edit_compare.mp4`, `edit_*.png`, `edit_stats.json` |
 | 2D parts | `seg2d.py` (Grounding DINO boxes → SAM masks), `dl_seg.py` | `parts2d.npz`, `parts2d.png`, `parts2d.json` |
-| 3D parts | `lift_parts.py` → `parts_core.py` | `parts3d.npz`, `parts3d_stats.json`, `camera_fit.png`, `parts3d_grid.png` |
+| 3D parts | `lift_parts.py` → `parts_core.py` | `parts3d.npz`, `parts3d_stats.json`, `camera_fit.png`, `parts3d_grid.png`; optional `--vox-feat dec --diff-png` also writes `parts3d_vox_feat_diff.png` |
 | Part outputs | `export_parts.py`, `part_graph.py`, `parts_video.py` | `<asset>_parts.ply/.json`, `<asset>_part_id.u8`, `<asset>_graph_parts.npz`, SIBR folders |
-| Part physics | `semantic_pose.py`, `semantic_shake.py`, `semantic_drop.py` | `out/semantic_*/` |
+| Part physics | public demos: `semantic_pose.py`, `semantic_shake.py`, `semantic_drop.py`; optional private-runtime driver: `part_physics.py` | `out/semantic_*/`; a deformed PLY or SIBR model folder on request |
 | Letter opener | `gen_letters.py`, `run_letters.sh`, `letters_drop.py` | `out/letters/letters_drop.mp4` |
 
 `run_asset.sh`, `run_variants.sh` and `run_letters.sh` chain the stages (Git Bash; set `PY` to your interpreter).
@@ -59,6 +59,24 @@ overlapping masks go to the smaller mask. `lift_parts.py` moves those names onto
 Gaussian `i` → voxel `i // 32`; the re-fit asset takes the nearest voxel. `parts3d.npz` keeps the field names used by
 the other scripts (`asset_part`, `asset_conf`, `asset_prob`, `gs_part_full`) and adds per-voxel labels.
 
+### Optional decoder-feature boundary refinement
+
+This is deliberately a refinement, not a source of named semantic labels. `dec_features.py` replays the saved SLat
+through TRELLIS' Gaussian decoder and records the feature immediately before `out_layer`. It first checks that the
+saved voxel order is unchanged and that the re-decoded Gaussian coordinates agree with the saved output. In the local
+bear and robot validation runs, this captured one 768-D feature per active voxel, 32 generated Gaussians per voxel,
+and `xyz_max_abs_error = 0.0`.
+
+With `lift_parts.py --mode proj --vox-feat dec`, those features are deterministically reduced to 64-D PCA descriptors
+and used only on the 26-neighbour voxel graph and against the named, visible 2D seeds. The visible seeds remain fixed;
+the feature is not clustered into names and does not claim that TRELLIS directly predicts `head`, `arm`, or `leg`.
+The refinement is skipped when camera fitting falls back, and it never changes the older `--mode attn` path.
+
+On the synthetic teddy test, this optional pass must improve boundary accuracy by at least two percentage points while
+not reducing total or visible accuracy. The latest local runs changed 305 / 24,842 bear voxels (28 visible, 277 hidden)
+and 252 / 20,498 robot voxels (6 visible, 246 hidden). Real assets have no 3D ground truth, so those counts are not an
+accuracy claim.
+
 **Why the teddy bear's arm mixed** under the attention-only version:
 
 1. Cross-attention retrieves features rather than finding correspondences. On uniform fur, arm tokens also look at
@@ -90,10 +108,10 @@ reaches silhouette IoU 0.894 (0.298 from attention alone) with colour correlatio
 body goes from 11.6% (1st) to 15.0% (2nd) to 25.2% (3rd) as the hidden sides and back return to the body. There is no
 ground truth, so the part turntables are the check. A little arm label remains on the back of the head.
 
-On the robot, the camera started from the attention alone got stuck (silhouette IoU 0.69, colour 0.08), so the labels
-fell back to the 1st method; the robot results in the portfolio are that 1st-method labeling. The global search was
-added for this case. On the synthetic bear it recovers the camera to 0.7 px even when the attention is replaced by
-noise, but the robot has not been re-run with it.
+The earlier robot initialization from attention alone got stuck (silhouette IoU 0.69, colour 0.08). The current robot
+run uses the global camera search instead (`az0`, elevation -10°, perspective 0.25): silhouette IoU 0.853 and visible
+colour correlation 0.438, with no attention fallback. On the synthetic bear the same search recovers the camera to
+0.7 px even when the attention is replaced by noise.
 
 ### Using the labels
 
@@ -106,8 +124,45 @@ noise, but the robot has not been re-run with it.
   arm and torso Gaussians touch, and the whole arm is rotated about it (60°). XPBD moves the rest.
 - **Per-part materials** (`semantic_shake.py`). Gaussians that are not arm move rigidly with the shaken base; the arms
   are a soft XPBD body.
+- **Part-bounded XPBD, private runtime** (`part_physics.py`). It verifies that `asset_part` and the graph use the same
+  Gaussian order, then passes IDs through a C ABI. Volume clusters cannot span different known labels, and object shape
+  matching is split by `(graph component, part)`. Unresolved IDs use neighbouring labels where possible; remaining
+  ones are explicitly reported as fallback groups. `--part-stiffness head=0.8,arm=0.2` sets only per-part shape-match
+  strength. `--out-ply` and `--out-model` write a static result for SIBR; they do not add an interactive per-part UI.
 - **Export** (`export_parts.py`). `part_id` as a PLY property, raw bytes and JSON, plus SIBR model folders coloured by
   part or with chosen parts hidden. The SIBR viewer has no per-part toggles or per-part physics UI yet.
+
+### Run the optional local physics path
+
+The following is a Windows PowerShell example for the local bear labels. It is intentionally opt-in and does not
+replace any published video or asset. `--drive-part` is only a small, repeatable validation action: it holds the named
+part at an offset for a few solver steps, then exports the static result.
+
+```powershell
+$env:APG_RUNTIME_ROOT = "C:\gaussian-splatting\isaac_demo"
+$py = "C:\anaconda\anaconda3\envs\trellis\python.exe"
+cd C:\public-repos\3d-representation-portfolio\demos\generative-3d
+
+& $py .\part_physics.py `
+  --asset gen_bear_sem_d100k `
+  --parts C:\gaussian-splatting\genai\out\bear_sem\parts3d.npz `
+  --dll C:\gaussian-splatting\isaac_demo\xpbd_dll\xpbd_isaac_part_v2.dll `
+  --steps 2 --drive-part arm --drive-offset "0.08,0,0.03" --drive-steps 2 `
+  --out-ply C:\gaussian-splatting\genai\out\bear_sem\part_physics_bear_v2.ply `
+  --out-model C:\gaussian-splatting\output_1\gen_bear_sem_part_physics_v2
+```
+
+Open that generated model with the local SIBR viewer:
+
+```powershell
+cd C:\gaussian-splatting\SIBR_viewers\install\bin
+.\SIBR_gaussianViewer_app.exe `
+  --model-path C:\gaussian-splatting\output_1\gen_bear_sem_part_physics_v2 `
+  --iteration 1 --device 0 --no_interop
+```
+
+For an A/B comparison against ordinary object-level shape matching, add `--no-part-shape`. To disable the
+part-bounded volume topology too, add `--no-part-volume`.
 
 ### Measured
 
@@ -118,8 +173,12 @@ noise, but the robot has not been re-run with it.
 - Per-part materials (robot; feet on a base shaken ±4 cm, 2 Hz, 1.6 s). Geometry graph with one material (edge
   stiffness 0.3, object shape 0.1): head / torso / arm wobble 2.20 / 1.35 / 2.18 cm RMS. Part-aware (rigid body, arm
   stiffness 0.2, shape 0.08): 0 / 0 / 3.05 cm. Which parts are rigid or soft was chosen by hand.
-- `semantic_drop.py` (per-part shape stiffness during a drop) was not convincing with the current solver, whose shape
-  matching is one object-level rigid fit; per-part rigid fitting in the solver is the next step.
+- Local part-aware XPBD validation on the 99,999-Gaussian bear formed five shape groups and reported zero
+  cross-label volume clusters and zero unresolved fallback groups. Holding 18,344 arm Gaussians 8 cm aside produces a
+  different result from ordinary object-level shape matching (mean position difference 0.0090 in source units).
+  This confirms the constraint path is active; it is not yet a stability, speed, or visual-quality benchmark.
+- The public `semantic_drop.py` remains an object-level demo. The private runtime now has opt-in `(component, part)`
+  shape matching and part-bounded volume clusters, but drop-scenario quality still needs a separate evaluation.
 
 ## Letter opener
 
@@ -136,4 +195,7 @@ video; `--probe --probe-seconds 13` reports how many letters stay upright.
 - Single-image 3D generation must infer unseen surfaces, so the back side may be less stable.
 - Count reduction is post-processing; generation-time control over representation size remains future work.
 - Part prompts are chosen per object and thin parts can be missed; the part lifting depends on the estimated camera.
-- The graph builder and the extended XPBD runtime are not part of this repository (root README, Installation step 5).
+- `part_physics.py` is included as an execution driver, but its graph builder and modified XPBD runtime/DLL remain in
+  the private local runtime; cloning this repository alone cannot run that path.
+- The current part-aware solver uses labels for volume-cluster topology and shape-match grouping only. It does not infer
+  `rigid/deformable/fixed` types, set mass or damping by part, or automatically remove all cross-part graph edges.

@@ -74,6 +74,17 @@ def main():
     ap.add_argument("--gate-color", type=float, default=0.2, help="보이는 복셀 색 · 사진 색 상관이 이보다 낮으면 attn 모드로")
     ap.add_argument("--no-cleanup", action="store_true", help="작은 조각 정리를 끈다")
     ap.add_argument("--vox-refine", type=float, default=0.5, help="보이는 복셀에 자기 투영 라벨을 섞는 비율 (0 = 끔)")
+    ap.add_argument("--vox-feat", default="none", choices=["none", "dec"],
+                    help="none = 기존 방법 · dec = 저장한 Gaussian decoder 복셀 특징으로 경계만 다듬기")
+    ap.add_argument("--vox-feat-alpha", type=float, default=0.5, help="decoder 복셀 특징 전파 세기")
+    ap.add_argument("--vox-feat-iters", type=int, default=30, help="decoder 복셀 특징 전파 횟수")
+    ap.add_argument("--vox-feat-tau", type=float, default=0.1, help="decoder 복셀 특징 cosine 온도")
+    ap.add_argument("--vox-feat-pca", type=int, default=64, help="decoder 특징의 PCA 차원")
+    ap.add_argument("--vox-feat-vote", type=float, default=0.2,
+                    help="보이는 named seed와 decoder 특징 유사도 투표 비율 (0 = 끔)")
+    ap.add_argument("--vox-feat-vote-tau", type=float, default=0.1,
+                    help="named seed decoder 특징 투표 cosine 온도")
+    ap.add_argument("--diff-png", action="store_true", help="decoder 특징 전/후에 바뀐 복셀 그림도 저장한다")
     ap.add_argument("--no-render", action="store_true", help="parts3d_grid.png 를 건너뛴다 (CUDA 래스터라이저 불필요)")
     ap.add_argument("--baselines", action="store_true", help="그림에 좌표 · 특징 k-means 기준선 행도 넣는다")
     args = ap.parse_args()
@@ -92,11 +103,43 @@ def main():
     g2v = np.arange(len(P)) // 32
     blocks = dict(attn_blocks=[int(b) for b in args.attn_blocks.split(",")],
                   feat_blocks=[int(b) for b in args.feat_blocks.split(",")], knn=args.knn, alpha=args.alpha)
+    vox_feat, dec_raw, dec_meta = None, None, None
+    if args.vox_feat == "dec":
+        if args.mode != "proj":
+            ap.error("--vox-feat dec 는 카메라 · 가시성 투영을 쓰는 --mode proj 에서만 쓸 수 있습니다")
+        dec_path = os.path.join(out, "dec_feat.npz")
+        if not os.path.isfile(dec_path):
+            ap.error(f"{dec_path} 가 없습니다. 먼저 `python dec_features.py --name {args.name}` 을 실행하세요.")
+        dec = np.load(dec_path)
+        if "dec_feat" not in dec or "dec_coords" not in dec:
+            ap.error(f"{dec_path} 에 dec_feat 또는 dec_coords 가 없습니다. dec_features.py 로 다시 만드세요.")
+        if not np.array_equal(dec["dec_coords"].astype(np.int16), sem["slat_coords"].astype(np.int16)):
+            ap.error("dec_feat.npz 의 voxel 순서가 sem.npz 와 다릅니다. 이 특징 파일을 사용하지 않습니다.")
+        dec_raw = dec["dec_feat"].astype(np.float32)
+        vox_feat = pc.voxel_features(dec_raw, pca_dim=args.vox_feat_pca)
+        if "meta" in dec:
+            try:
+                dec_meta = json.loads(str(dec["meta"].item()))
+            except (TypeError, ValueError):
+                dec_meta = None
 
-    res, st = pc.lift(sem, label, names, mode=args.mode, alpha_mask=alpha, cond_rgb=cond,
-                      vox_col=pc.voxel_colors(col, op, V), iters=args.iters or None, radius=args.radius or None,
-                      erode=args.erode, gate_iou=args.gate_iou, gate_color=args.gate_color,
-                      cleanup=not args.no_cleanup, vox_refine=args.vox_refine, **blocks)
+    lift_kwargs = dict(mode=args.mode, alpha_mask=alpha, cond_rgb=cond, vox_col=pc.voxel_colors(col, op, V),
+                       iters=args.iters or None, radius=args.radius or None, erode=args.erode,
+                       gate_iou=args.gate_iou, gate_color=args.gate_color, cleanup=not args.no_cleanup,
+                       vox_refine=args.vox_refine, vox_feat=vox_feat, vox_feat_alpha=args.vox_feat_alpha,
+                       vox_feat_iters=args.vox_feat_iters, vox_feat_tau=args.vox_feat_tau,
+                       vox_feat_pca=args.vox_feat_pca, vox_feat_vote=args.vox_feat_vote,
+                       vox_feat_vote_tau=args.vox_feat_vote_tau, **blocks)
+    res, st = pc.lift(sem, label, names, **lift_kwargs)
+    before_dec = None
+    if args.diff_png and vox_feat is not None:
+        before_kwargs = dict(lift_kwargs)
+        before_kwargs["vox_feat"] = None
+        before_dec = pc.lift(sem, label, names, log=lambda *a: None, **before_kwargs)[0]
+    if "vox_feat" in st and st["vox_feat"].get("applied") and dec_meta is not None:
+        st["vox_feat"]["decoder"] = dec_meta
+    if before_dec is not None and "vox_feat" in st:
+        st["vox_feat"]["diff_png"] = "parts3d_vox_feat_diff.png"
     legacy = res if args.mode == "attn" else pc.lift(sem, label, names, mode="attn", log=lambda *a: None, **blocks)[0]
     st["parts"] = names
     st["token_share_prop"] = st["token_share"]                    # 예전 키 이름
@@ -155,12 +198,17 @@ def main():
             ("예전: ① + ② 반경 4 토큰 특징 전파", pc.part_colors(legacy["vox_part"])[g2v])]
     if "vox_proj_label" in res:
         rows += [("투영 투표 (입력 사진에 보이는 복셀만, 회색 = 모름)", pc.part_colors(res["vox_proj_label"])[g2v]),
-                 ("최종: 투영 + 고정 전파 + 부피 기준 가려진 쪽 + 조각 정리", pc.part_colors(res["vox_part"])[g2v])]
+                 ("최종: 투영 + 고정 전파 + 부피 기준 가려진 쪽"
+                  + (" + decoder 복셀 특징" if vox_feat is not None else "") + " + 조각 정리",
+                  pc.part_colors(res["vox_part"])[g2v])]
     if args.baselines:
         tc = sem["tok_coords"].astype(np.float32)
         rows += [("기준선: DiT 특징 k-means (이름 없음)",
                   pc.part_colors(pc.kmeans(pc.dit_features(sem, blocks["feat_blocks"]), K))[v2t][g2v]),
                  ("기준선: 좌표 k-means", pc.part_colors(pc.kmeans(tc, K))[v2t][g2v])]
+        if dec_raw is not None:
+            rows.insert(-1, ("기준선: decoder 특징 k-means (이름 없음)",
+                             pc.part_colors(pc.kmeans(dec_raw, K))[g2v]))
     c = P.mean(0)
     size = np.linalg.norm(P.max(0) - P.min(0))
     cams = [Cam(c + 1.3 * size * np.array([np.cos(a), np.sin(a), 0.3]), c, 256, 256, 35)
@@ -178,6 +226,14 @@ def main():
         dr.text((34 + k * 140, 6), n, fill=(20, 20, 20), font=font)
     tiles.append(np.asarray(leg))
     Image.fromarray(np.concatenate(tiles, 0)).save(os.path.join(out, "parts3d_grid.png"))
+    if before_dec is not None:
+        changed = before_dec["vox_part"] != res["vox_part"]
+        cc = np.full_like(col, 0.72)
+        cc[changed[g2v]] = pc.part_colors(res["vox_part"])[g2v][changed[g2v]]
+        im = Image.fromarray(np.concatenate([render(cm, P, q, S, op, cc) for cm in cams], 1))
+        ImageDraw.Draw(im).text((6, 4), "decoder 복셀 특징으로 바뀐 복셀 (회색 = 그대로)",
+                                fill=(20, 20, 20), font=font)
+        im.save(os.path.join(out, "parts3d_vox_feat_diff.png"))
 
 
 if __name__ == "__main__":
