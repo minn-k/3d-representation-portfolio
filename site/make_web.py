@@ -57,6 +57,26 @@ def poster(src_img, dst, w=None):
     im.save(dst, quality=88)
 
 
+def split_grid(grid, base_dst, keep=5, legend=30):
+    """부위 비교 그림 (--baselines 면 기준선 행이 더 붙음) → 앞 keep 행 + 범례 / 나머지 (기준선) 행.
+    두 에셋의 최종 분류표를 같은 행으로 맞추고, 기준선은 따로 보여 준다."""
+    im = Image.open(grid).convert("RGB")
+    row = round(256 * im.width / 1024)
+    n = (im.height - legend) // row
+    if n <= keep:
+        return
+    leg = im.crop((0, im.height - legend, im.width, im.height))
+
+    def stack(a, b, with_legend):
+        out = Image.new("RGB", (im.width, (b - a) * row + (legend if with_legend else 0)), (255, 255, 255))
+        out.paste(im.crop((0, a * row, im.width, b * row)), (0, 0))
+        if with_legend:
+            out.paste(leg, (0, (b - a) * row))
+        return out
+    stack(keep, n, False).save(base_dst, quality=88)                # 기준선 색은 부위가 아니라 묶음 번호 → 범례 없음
+    stack(0, keep, True).save(grid, quality=88)
+
+
 def first_frame(video, dst, t=0.0):
     subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-ss", f"{t:.2f}", "-i", video, "-frames:v", "1", "-q:v", "3", dst],
                    check=True)
@@ -119,14 +139,11 @@ def build_media():
         first_frame(os.path.join(A, f"{n}_parts.mp4"), os.path.join(A, f"{n}_parts.jpg"))
         poster(os.path.join(d, "parts2d.png"), os.path.join(A, f"{n}_parts2d.jpg"), 520)
         poster(os.path.join(d, "parts3d_grid.png"), os.path.join(A, f"{n}_parts3d_grid.jpg"), 1024)
+        split_grid(os.path.join(A, f"{n}_parts3d_grid.jpg"), os.path.join(A, f"{n}_baselines.jpg"))
         if os.path.exists(os.path.join(d, "parts3d_vox_feat_diff.png")):
             poster(os.path.join(d, "parts3d_vox_feat_diff.png"), os.path.join(A, f"{n}_vox_feat_diff.jpg"), 1400)
         if os.path.exists(os.path.join(d, "camera_fit.png")):                 # lift_parts.py --mode proj
             poster(os.path.join(d, "camera_fit.png"), os.path.join(A, f"{n}_camera_fit.jpg"), 1400)
-    sv = os.path.join(GEN, "semantic_shake", "robot_b.mp4")
-    if os.path.exists(sv):                                            # 핵심 영상: 흔들기 (semantic_shake.py)
-        enc(sv, os.path.join(A, "robot_shake.mp4"))
-        first_frame(os.path.join(A, "robot_shake.mp4"), os.path.join(A, "robot_shake.jpg"), 1.0)
     pv = os.path.join(GEN, "part_shake", "robot_part2_stiff.mp4")
     if os.path.exists(pv):                                            # 부위를 아는 솔버 흔들기 (part_shake.py)
         enc(pv, os.path.join(A, "robot_part_shake.mp4"))
@@ -217,8 +234,6 @@ def sem_section():
     def st(n, t):
         p = os.path.join(GEN, n, f"edit_stats_{t}.json")
         return jl(p) if os.path.exists(p) else None
-    sh = jl(os.path.join(GEN, "semantic_shake", "robot_b.json"))
-    wu, ws = sh["wobble_rms_cm"]["uniform"], sh["wobble_rms_cm"]["semantic"]
 
     ps_path = os.path.join(GEN, "part_shake", "robot_part2_stiff.json")
     pn_path = os.path.join(GEN, "part_shake", "robot_part_noshape.json")
@@ -230,10 +245,11 @@ def sem_section():
         ru, rp = ps["soft_rel_body_cm"]["uniform"]["rms"], ps["soft_rel_body_cm"]["part"]["rms"]
         part_shake_html = f"""
 
-    <h3>부위를 아는 솔버 — 강체 고정 없이 (진행 중)</h3>
-    <p class="sub">위 영상은 몸을 받침에 강체로 붙였다. 이번에는 두 로봇 모두 <b>발만 고정한 한 덩어리 연체</b>이고 모양 · 그래프 · 솔버가 같다.
+    <h3>그래서 무엇이 달라지나 — 부위마다 다른 물성</h3>
+    <p class="sub">기하 그래프에는 '부위' 가 없으니 물성도 온몸에 하나뿐이다 — 흔들면 머리 · 몸통 · 팔이 한 덩어리 젤리처럼 같이 출렁인다.
+      part_id 가 있으면 솔버가 부위를 알고 물성을 나눠 줄 수 있다. 두 로봇 모두 <b>발만 받침에 고정한 한 덩어리 연체</b>이고 모양 · 그래프 · 솔버가 같다.
       오른쪽만 part_id 를 솔버에 넘겼다: 부피 클러스터는 부위 안에서만, 형상 유지는 몸(머리 · 몸통 · 다리) 하나와 왼팔 · 오른팔을 따로,
-      간선 강성은 경계에서 몸 → 팔로 매끄럽게 이어지게. 받침은 좌우 ±{ps['amp'] * 100:.0f} cm · {ps['freq']:.0f} Hz · {ps['shake_s']} s.</p>
+      간선 강성은 경계에서 몸 → 팔로 매끄럽게 이어지게. 받침을 좌우 ±{ps['amp'] * 100:.0f} cm · {ps['freq']:.0f} Hz 로 {ps['shake_s']} s 흔든 뒤 멈춘다.</p>
     {video("robot_part_shake.mp4", "robot_part_shake.jpg", f"왼쪽 기존 그래프 · 물성 하나 · 오른쪽 부위를 아는 솔버 (형상 유지 몸 {ps['body_shape']} · 팔 {ps['soft_shape']}, 간선 강성 몸 {ps['body_stiff']} → 팔 {ps['soft_stiff']})", True)}
     <div class="table-wrap"><table class="metrics">
       <tr><th>발만 고정한 로봇<br><small>흔들림 = 받침 이동을 뺀 평균 (RMS, cm) · 팔 (몸 기준) = 몸의 강체 운동을 뺀 팔의 움직임<br>경계 간선 = 부위가 다른 두 가우시안을 잇는 간선 · 낮을수록 이음매가 자연스러움</small></th><th>머리</th><th>몸통</th><th>팔 (몸 기준)</th><th>경계 간선<br><small>1.5배 넘게 늘어난 비율</small></th></tr>
@@ -244,7 +260,8 @@ def sem_section():
     <p class="note">아직 목표(몸은 덜, 팔은 더)에 못 미친다. 좌우로 흔들면 힘이 옆으로 뻗은 팔의 <b>길이 방향</b>으로 들어가 팔을 돌리지 못하고,
       보이는 움직임은 무거운 머리가 끄덕이는 것이다. 팔에 따로 형상 기준을 주면 두 기준이 만나는 어깨 이음매를 거리 간선만 붙잡아
       경계 간선이 13% 넘게 늘어난다. 형상 기준은 하나로 두고 부피 · 강성만 부위별로 하면 몸통 흔들림이 25% 줄고 경계 늘어남이 1/3 로
-      확실히 나아진다. 다음 단계는 경계 띠에서 두 기준의 목표를 섞는 것(겹치는 형상 영역, lattice shape matching)과 위아래로 흔드는 비교.</p>"""
+      확실히 나아진다. 다음 단계는 경계 띠에서 두 기준의 목표를 섞는 것(겹치는 형상 영역, lattice shape matching)과 위아래로 흔드는 비교.
+      어느 부위를 단단 / 무름으로 할지는 사람이 정했다.</p>"""
     def labels_and_stats(name):
         z = np.load(os.path.join(GEN, name, "parts3d.npz"))
         names = [str(x) for x in z["names"]]
@@ -280,25 +297,15 @@ def sem_section():
       {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 최신 4차 결과: 보이는 seed 고정 · 부피 기준 가려진 쪽 · decoder 특징 경계 보정", True)}
     </div>
 
-    <h3>그래서 무엇이 달라지나 — 부위마다 다른 물성</h3>
-    <p class="sub">기하 그래프에는 '부위' 가 없으니 물성도 온몸에 하나뿐이다 — 흔들면 머리 · 몸통 · 팔이 한 덩어리 젤리처럼 같이 출렁인다.
-      part_id 가 있으면 부위마다 물성을 줄 수 있다: 몸통 · 머리 · 다리는 강체로, <b>양팔만 무른 XPBD 연체</b>로.
-      같은 받침을 같은 폭(±{sh['amp'] * 100:.0f} cm · {sh['freq']:.0f} Hz · {sh['shake_s']:.1f} s)으로 흔든 뒤 멈춘다.</p>
-    {video("robot_shake.mp4", "robot_shake.jpg", "왼쪽 기존 그래프 · 온몸 같은 연체 · 오른쪽 의미 부위 · 몸체 강체 + 양팔만 연체", True)}
-    <div class="table-wrap"><table class="metrics">
-      <tr><th>흔들림 (cm)<br><small>받침을 흔드는 동안 각 부위가 받침과 따로 움직인 거리의 평균 (RMS)<br>0 = 받침과 한 몸으로 움직임 (단단) · 클수록 많이 출렁임</small></th><th>머리</th><th>몸통</th><th>팔</th></tr>
-      <tr><td>기존 그래프 · 온몸 같은 연체</td><td>{wu['head']:.2f}</td><td>{wu['torso']:.2f}</td><td>{wu['arm']:.2f}</td></tr>
-      <tr><td>의미 부위 · 몸체 강체 + 양팔 연체</td><td><b>{ws['head']:.2f}</b></td><td><b>{ws['torso']:.2f}</b></td><td><b>{ws['arm']:.2f}</b></td></tr>
-    </table></div>
-    <p class="note">목표는 머리 · 몸통은 0 (단단), 팔만 출렁임 — 의미 부위 쪽이 그대로 나왔고, 기존 그래프는 온몸이 같이 출렁인다.
-      물성 — 기존 그래프: 온몸 간선 강성 {sh['uniform_stiff']} · 물체 형상 유지 {sh['uniform_shape']} (다리만 받침에 고정).
-      의미 부위: part_id 가 팔이 아닌 가우시안(몸통 · 머리 · 다리)은 강체로 받침과 함께 움직이고, 팔 가우시안만 간선 강성 {sh['soft_stiff']} ·
-      형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계. 이 영상은 로봇의 이전(1차) part_id 로 만든 것이다.</p>{part_shake_html}
+{part_shake_html}
 
     <h3>분류는 어떻게 다듬었나 — 곰 인형에서의 4단계 개선</h3>
     <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (좌표 k-means 는 머리와 몸을 가로질러 자르고, 특징 k-means 는 무늬로 묶는다).
       그래서 생성 모델이 입력 사진의 어디를 보는지(attention)에서 출발했고, 털 질감이 고른 곰 인형에서 부위가 섞이는 문제를 네 단계에 걸쳐 고쳤다.
       각 줄은 같은 곰의 part_id 를 정면 · 옆 · 뒤 · 반대 옆에서 본 것.</p>
+    <figure class="media"><img src="assets/bear_sem_baselines.jpg" alt="기준선 — 이름 없이 묶기" loading="lazy">
+      <figcaption><b>기준선 · 이름 없이 특징이나 좌표만으로 묶기</b> — 위에서부터 DiT 특징 k-means · decoder 특징 k-means · 좌표 k-means.
+        특징으로 묶으면 무늬 · 재질대로, 좌표로 묶으면 위치대로 나뉘어 머리 · 팔 같은 부위가 되지 않는다 (색은 부위 이름이 아니라 묶음 번호).</figcaption></figure>
     <figure class="media"><img src="assets/bear_parts_try1.jpg" alt="1차 — attention 투표 + DiT 특징 전파" loading="lazy">
       <figcaption><b>1차 · attention 투표 + DiT 특징 전파</b> — 오른팔 안쪽에 머리 라벨이 띠처럼 섞이고 다리에 머리 점이 생겼다.
         cross-attention 은 대응점이 아니라 특징 검색이라 고른 털에서는 머리 · 다리 패치까지 본다. 같은 시선 위의 가려진 복셀도
@@ -341,7 +348,7 @@ def sem_section():
       <b>곰과 안내 로봇 모두 4차 방법</b>의 결과다. 행: 원래 색 · attention 투표만 · 예전 1차 결과 · 2차의 투영 투표
       (사진에 보이는 복셀만, 회색 = 모름) · 4차 최종. 로봇은 global search가 attention 초기화 실패를 피해서
       실루엣 IoU {rst['camera']['silhouette_iou']:.3f}, visible colour correlation {rst['camera']['color_corr_visible']:.3f}로 카메라를 맞췄고,
-      attention fallback 없이 decoder 특징 보정을 적용했다. 곰 그림 아래 세 줄은 기준선(DiT 특징 · decoder 특징 · 좌표 k-means)이다 — 부위 이름이 없고, 특징 k-means 는 무늬대로 묶여 part_id 대안이 되지 못한다.</p>
+      attention fallback 없이 decoder 특징 보정을 적용했다. 단계별 개선(위 1~4차)은 곰에서 했고, 로봇에는 완성된 4차 방법을 그대로 적용했다 — 두 그림은 같은 행으로 그렸다.</p>
     <div class="row2">
       {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
       {img("bear_sem_parts3d_grid.jpg", "곰 인형")}
@@ -352,8 +359,8 @@ def sem_section():
       <ul>
         <li>사진에 보이는 쪽은 2D 부위를 그대로 따르지만 가려진 쪽은 부피로 추정한 것이라, 곰 뒷머리처럼 조금 섞인다. 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
         <li>로컬 런타임에 <b>부위를 아는 솔버</b>를 넣었다: 형상 유지를 (그래프 연결 성분, 부위)마다 따로 계산하고, 부피 클러스터는 부위 경계를 넘지 않게 만든다.
-          실제 곰 99,999개에서 형상 그룹 5개, 부위를 넘는 부피 클러스터 0개로 구조가 적용된 것을 확인했다. 흔들기 · 당기기에서 위 영상과 같은 조건으로
-          비교한 영상과 수치는 아직이다. 재질 · 질량 · 감쇠를 부위 이름에서 자동으로 정하는 것도 다음 단계.</li>
+          실제 곰 99,999개에서 형상 그룹 5개, 부위를 넘는 부피 클러스터 0개로 구조가 적용된 것을 확인했다. 위 흔들기 영상이 첫 비교다 — 몸통은 덜 흔들리지만,
+          팔만 덜렁이게 하는 것과 어깨 이음매는 아직이다. 재질 · 질량 · 감쇠를 부위 이름에서 자동으로 정하는 것도 다음 단계.</li>
       </ul>
     </div>
   </div>
