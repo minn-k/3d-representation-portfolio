@@ -115,6 +115,8 @@ def main():
     ap.add_argument("--no-edge-ramp", action="store_true", help="비교용: 오른쪽 간선 강성도 왼쪽과 같게")
     ap.add_argument("--pin-h", type=float, default=0.33, help="받침에 붙이는 높이 (다리)")
     ap.add_argument("--amp", type=float, default=0.02, help="흔들기 폭 [m]")
+    ap.add_argument("--axis", default="x", choices=["x", "y", "z"],
+                    help="흔드는 방향 (월드). x = 좌우 (옆으로 뻗은 팔에는 길이 방향이라 팔이 돌지 않는다) · z = 위아래")
     ap.add_argument("--freq", type=float, default=2.0, help="[Hz]")
     ap.add_argument("--shake-s", type=float, default=2.4)
     ap.add_argument("--seconds", type=float, default=5.0)
@@ -160,6 +162,10 @@ def main():
     print(f"[part_shake] {len(pieces)} part pieces: " + ", ".join(f"{p['part']}:{p['gaussians']:,}" for p in pieces)
           + f" | soft ({args.soft}) {soft.sum():,} | pinned {len(pin):,} | dll {os.path.basename(src)}", flush=True)
     cross = part_clean[e[:, 0]] != part_clean[e[:, 1]]           # 부위 경계 간선 (지표용)
+    pa_, pb_ = np.sort(np.stack([part_clean[e[cross, 0]], part_clean[e[cross, 1]]], 1), 1).T
+    pair_of = [f"{names[a_]}-{names[b_]}" for a_, b_ in zip(pa_, pb_)]
+    pair_names = sorted(set(pair_of))
+    pair_idx = np.array([pair_names.index(x) for x in pair_of], np.int64)
     soft_piece = np.isin(piece_part, soft_ids)
     if args.groups == "soft":                                    # 몸 = id 0 하나, 말랑한 조각 = 1, 2, …
         gid = np.zeros(len(piece_part), np.int32)
@@ -212,7 +218,7 @@ def main():
         sims.append(sim)
     part_stats = sims[1].part_stats()
 
-    ex_src = Rm.T @ np.array([1.0, 0, 0]) / s                   # 월드 x 1 m → 원본 좌표
+    ex_src = Rm.T @ np.eye(3)["xyz".index(args.axis)] / s       # 월드 축 1 m → 원본 좌표
     offs = [np.array([-args.gap / 2, 0, 0]), np.array([args.gap / 2, 0, 0])]
     cam = Cam(vec(args.eye), vec(args.look), W, H, args.fovy)
     font = load_font(26)
@@ -220,7 +226,7 @@ def main():
     rest = inp0["rest"].astype(np.float64)
     wob = {m: {n: [] for n in names} for m in modes}
     shp = {m: {n: [] for n in names} for m in modes}
-    bnd = {m: {"p95": [], "max": [], "over_1p5": []} for m in modes}
+    bnd = {m: {"p95": [], "max": [], "over_1p5": [], "pairs": {n: [] for n in pair_names}} for m in modes}
     rel = {m: [] for m in modes}
     step_s = {m: 0.0 for m in modes}
     frames = []
@@ -257,6 +263,8 @@ def main():
                 bnd[mode]["p95"].append(float(np.percentile(r, 95)))
                 bnd[mode]["max"].append(float(r.max()))
                 bnd[mode]["over_1p5"].append(float(np.mean(r > 1.5)))
+                for q_, n_ in enumerate(pair_names):                  # 어느 경계가 늘어나나 (팔-몸통 · 몸통-다리 …)
+                    bnd[mode]["pairs"][n_].append(float(np.mean(r[pair_idx == q_] > 1.5)))
             sc, q, _ = sim.shapes(1e-2)
             Ps.append(to_w(P) + off)
             Qs.append(mat_to_quat(Rm[None] @ quat_to_mat(q.astype(np.float64))))
@@ -276,7 +284,7 @@ def main():
     imageio.mimsave(os.path.join(out, f"{args.tag}.mp4"), frames, fps=30, quality=8, macro_block_size=8)
     imageio.imwrite(os.path.join(out, f"{args.tag}_mid.png"), frames[int(len(frames) * 0.35)])
     rms = lambda v: round(float(np.sqrt(np.mean(np.square(v)))), 3)  # noqa: E731
-    st = {k_: getattr(args, k_) for k_ in ("asset", "soft", "compliance", "uniform_stiff", "uniform_shape", "body_stiff",
+    st = {k_: getattr(args, k_) for k_ in ("asset", "soft", "axis", "compliance", "uniform_stiff", "uniform_shape", "body_stiff",
                                             "body_shape", "soft_stiff", "soft_shape", "blend_hops", "min_piece",
                                             "groups", "no_part_shape", "no_part_volume", "no_edge_ramp", "pin_h", "amp", "freq",
                                             "shake_s", "seconds", "damping")}
@@ -290,7 +298,9 @@ def main():
         "shape_error_cm": {m: {n: {"rms": rms(v), "max": round(float(np.max(v)), 3)} for n, v in c.items() if v}
                            for m, c in shp.items()},
         "boundary": {m: {"p95_max": round(max(b["p95"]), 3), "max": round(max(b["max"]), 3),
-                         "over_1p5_max": round(max(b["over_1p5"]), 5)} for m, b in bnd.items() if b["p95"]},
+                         "over_1p5_max": round(max(b["over_1p5"]), 5),
+                         "over_1p5_max_by_pair": {n: round(max(v), 5) for n, v in b["pairs"].items() if v}}
+                     for m, b in bnd.items() if b["p95"]},
         "step_ms": {m: round(1000 * v / max(n_steps, 1), 2) for m, v in step_s.items()},
     })
     json.dump(st, open(os.path.join(out, f"{args.tag}.json"), "w"), indent=2, ensure_ascii=False)
