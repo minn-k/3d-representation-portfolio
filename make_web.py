@@ -43,9 +43,10 @@ def jl(p):
         return json.load(f)
 
 
-def enc(src, dst, scale_w=None, crop_top=0):
-    """H.264 yuv420p + faststart (웹 재생용). crop_top: 위쪽을 잘라낼 픽셀 (영상 안 제목 글자)."""
-    f = ([f"crop=iw:ih-{crop_top}:0:{crop_top}"] if crop_top else []) + ([f"scale={scale_w}:-2"] if scale_w else [])
+def enc(src, dst, scale_w=None, crop_top=0, crop_bottom=0):
+    """H.264 yuv420p + faststart (웹 재생용). crop_top / crop_bottom: 위 · 아래를 잘라낼 픽셀 (영상 안 글자)."""
+    cut = crop_top + crop_bottom
+    f = ([f"crop=iw:ih-{cut}:0:{crop_top}"] if cut else []) + ([f"scale={scale_w}:-2"] if scale_w else [])
     vf = ["-vf", ",".join(f)] if f else []
     subprocess.run([FFMPEG, "-y", "-loglevel", "error", "-i", src, *vf, "-c:v", "libx264", "-pix_fmt", "yuv420p",
                     "-crf", "23", "-preset", "slow", "-movflags", "+faststart", "-an", dst], check=True)
@@ -147,7 +148,7 @@ def build_media():
             poster(os.path.join(d, "camera_fit.png"), os.path.join(A, f"{n}_camera_fit.jpg"), 1400)
     pv = os.path.join(GEN, "part_shake", "robot_part2_stiff.mp4")
     if os.path.exists(pv):                                            # 부위를 아는 솔버 흔들기 (part_shake.py)
-        enc(pv, os.path.join(A, "robot_part_shake.mp4"), crop_top=90)          # 영상 안 제목은 표와 캡션이 대신한다
+        enc(pv, os.path.join(A, "robot_part_shake.mp4"), crop_top=90, crop_bottom=100)  # 영상 안 글자는 캡션이 대신한다
         first_frame(os.path.join(A, "robot_part_shake.mp4"), os.path.join(A, "robot_part_shake.jpg"), 1.0)
     return rows
 
@@ -212,7 +213,7 @@ def reduce_table(rows):
     head = ("<tr><th rowspan=2>에셋</th><th colspan=2>10만 개 · 물체 PSNR<br><small>원본 대비 · 높을수록 같음</small></th>"
             "<th colspan=2>5만 개 · 물체 PSNR</th>"
             "<th colspan=3>XPBD 1스텝 (20회 반복)<br><small>낮을수록 빠름</small></th>"
-            "<th colspan=2>그래프 준비<br><small>변환~순서 대응</small></th>"
+            "<th colspan=2>그래프 준비<br><small>변환부터 그래프까지</small></th>"
             "<th colspan=2>위치만 vs Σ′ 갱신<br><small>평균 픽셀 차이 (0~255)</small></th></tr>"
             "<tr><th>잘라내기만</th><th>재최적화</th><th>잘라내기만</th><th>재최적화</th>"
             "<th>원본</th><th>10만</th><th>5만</th><th>원본</th><th>10만</th><th>원본</th><th>10만</th></tr>")
@@ -220,7 +221,7 @@ def reduce_table(rows):
     for r in rows:
         d1, d5, v = r["distill"]["100k"], r["distill"]["50k"], r["var"]
         body.append(
-            f"<tr><td>{E(r['title'])}<br><small>원본 {fmt(r['ed_full']['gaussians'])}개</small></td>"
+            f"<tr><td>{E(r['title'])}<br><small>정리 후 {fmt(r['ed_full']['gaussians'])}개</small></td>"
             f"<td>{d1['psnr_obj_prune_only']:.1f} dB</td><td><b>{d1['psnr_obj_distilled']:.1f} dB</b></td>"
             f"<td>{d5['psnr_obj_prune_only']:.1f} dB</td><td><b>{d5['psnr_obj_distilled']:.1f} dB</b></td>"
             f"<td>{r['ed_full']['xpbd_ms_per_step']:.0f} ms</td><td><b>{v['d100k']['ed']['xpbd_ms_per_step']:.0f} ms</b></td>"
@@ -232,136 +233,112 @@ def reduce_table(rows):
 
 
 def sem_section():
-    def st(n, t):
-        p = os.path.join(GEN, n, f"edit_stats_{t}.json")
-        return jl(p) if os.path.exists(p) else None
-
     ps_path = os.path.join(GEN, "part_shake", "robot_part2_stiff.json")
     pn_path = os.path.join(GEN, "part_shake", "robot_part_noshape.json")
     part_shake_html = ""
     if os.path.exists(ps_path) and os.path.exists(pn_path):          # 부위를 아는 솔버 (part_shake.py)
-        ps, pn = jl(ps_path), jl(pn_path)
+        ps, pn = jl(ps_path), jl(pn_path)                             # pn: 형상 유지 하나 (--no-part-shape, 몸 0.6 · 0.15)
         pu, pp, nn = ps["wobble_rms_cm"]["uniform"], ps["wobble_rms_cm"]["part"], pn["wobble_rms_cm"]["part"]
         bu, bp, bn = (100 * x["boundary"][m]["over_1p5_max"] for x, m in ((ps, "uniform"), (ps, "part"), (pn, "part")))
         ru, rp = ps["soft_rel_body_cm"]["uniform"]["rms"], ps["soft_rel_body_cm"]["part"]["rms"]
         part_shake_html = f"""
-
-    <h3>그래서 무엇이 달라지나 — 부위마다 다른 물성</h3>
-    <p class="sub">기하 그래프에는 '부위' 가 없으니 물성도 온몸에 하나뿐이다 — 흔들면 머리 · 몸통 · 팔이 한 덩어리 젤리처럼 같이 출렁인다.
-      part_id 가 있으면 솔버가 부위를 알고 물성을 나눠 줄 수 있다. 두 로봇 모두 <b>발만 받침에 고정한 한 덩어리 연체</b>이고 모양 · 그래프 · 솔버가 같다.
-      오른쪽만 part_id 를 솔버에 넘겼다: 부피 클러스터는 부위 안에서만, 형상 유지는 몸(머리 · 몸통 · 다리) 하나와 왼팔 · 오른팔을 따로,
-      간선 강성은 경계에서 몸 → 팔로 매끄럽게 이어지게. 받침을 좌우 ±{ps['amp'] * 100:.0f} cm · {ps['freq']:.0f} Hz 로 {ps['shake_s']} s 흔든 뒤 멈춘다.</p>
-    {video("robot_part_shake.mp4", "robot_part_shake.jpg", f"왼쪽 기존 그래프 · 물성 하나 · 오른쪽 부위를 아는 솔버 (형상 유지 몸 {ps['body_shape']} · 팔 {ps['soft_shape']}, 간선 강성 몸 {ps['body_stiff']} → 팔 {ps['soft_stiff']})", True)}
+    <h3>부위마다 다른 물성 — 흔들기 비교</h3>
+    <p class="sub">part_id 를 솔버에 넘기면 물성을 부위마다 다르게 줄 수 있다 — 여기서는 몸은 단단하게, 팔은 무르게.
+      두 로봇 모두 <b>발만 받침에 고정한 한 덩어리 연체</b>이고 모양 · 그래프 · 솔버가 같다. 오른쪽만 part_id 를 넘겨
+      부피 클러스터를 부위 안에서만 만들고, 형상 유지를 몸(머리 · 몸통 · 다리)과 두 팔로 나누고, 간선 강성을 경계에서 몸 → 팔로 매끄럽게 낮췄다.
+      받침을 좌우 ±{ps['amp'] * 100:.0f} cm · {ps['freq']:.0f} Hz 로 {ps['shake_s']} s 흔든 뒤 멈춘다.</p>
+    <figure class="media"><video src="assets/robot_part_shake.mp4" poster="assets/robot_part_shake.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>왼쪽 기존 그래프 · 물성 하나 / 오른쪽 part_id 를 넘긴 솔버 (간선 강성 몸 {ps['body_stiff']} → 팔 {ps['soft_stiff']} · 형상 유지 몸 {ps['body_shape']} · 팔 {ps['soft_shape']})</figcaption></figure>
     <div class="table-wrap"><table class="metrics">
-      <tr><th>발만 고정한 로봇<br><small>흔들림 = 받침 이동을 뺀 평균 (RMS, cm) · 팔 (몸 기준) = 몸의 강체 운동을 뺀 팔의 움직임<br>경계 간선 = 부위가 다른 두 가우시안을 잇는 간선 · 낮을수록 이음매가 자연스러움</small></th><th>머리</th><th>몸통</th><th>팔 (몸 기준)</th><th>경계 간선<br><small>1.5배 넘게 늘어난 비율</small></th></tr>
+      <tr><th>발만 고정한 로봇<br><small>흔들림 RMS (cm) · 받침 이동을 뺀 값<br>팔은 몸의 움직임까지 뺀 값</small></th><th>머리</th><th>몸통</th><th>팔 (몸 기준)</th><th>경계 간선<br><small>1.5배 넘게 늘어난 비율<br>낮을수록 이음매가 자연스러움</small></th></tr>
       <tr><td>기존 그래프 · 물성 하나</td><td>{pu['head']:.2f}</td><td>{pu['torso']:.2f}</td><td>{ru:.2f}</td><td>{bu:.1f}%</td></tr>
-      <tr><td>부위를 아는 솔버 (위 영상)</td><td>{pp['head']:.2f}</td><td>{pp['torso']:.2f}</td><td>{rp:.2f}</td><td>{bp:.1f}%</td></tr>
-      <tr><td>형상 유지는 하나 · 부피 · 강성만 부위별</td><td>{nn['head']:.2f}</td><td><b>{nn['torso']:.2f}</b></td><td>—</td><td><b>{bn:.1f}%</b></td></tr>
+      <tr><td>부피 · 형상 유지 · 강성 모두 부위별 (위 영상)</td><td>{pp['head']:.2f}</td><td>{pp['torso']:.2f}</td><td>{rp:.2f}</td><td>{bp:.1f}%</td></tr>
+      <tr><td>부피 · 강성만 부위별, 형상 유지는 하나<br><small>몸 강성 {pn['body_stiff']} · 형상 유지 {pn['body_shape']}</small></td><td>{nn['head']:.2f}</td><td><b>{nn['torso']:.2f}</b></td><td><small>미측정</small></td><td><b>{bn:.1f}%</b></td></tr>
     </table></div>
-    <p class="note">아직 목표(몸은 덜, 팔은 더)에 못 미친다. 좌우로 흔들면 힘이 옆으로 뻗은 팔의 <b>길이 방향</b>으로 들어가 팔을 돌리지 못하고,
-      보이는 움직임은 무거운 머리가 끄덕이는 것이다. 팔에 따로 형상 기준을 주면 두 기준이 만나는 어깨 이음매를 거리 간선만 붙잡아
-      경계 간선이 13% 넘게 늘어난다. 형상 기준은 하나로 두고 부피 · 강성만 부위별로 하면 몸통 흔들림이 25% 줄고 경계 늘어남이 1/3 로
-      확실히 나아진다. 다음 단계는 경계 띠에서 두 기준의 목표를 섞는 것(겹치는 형상 영역, lattice shape matching)과 위아래로 흔드는 비교.
-      어느 부위를 단단 / 무름으로 할지는 사람이 정했다.</p>"""
-    def labels_and_stats(name):
-        z = np.load(os.path.join(GEN, name, "parts3d.npz"))
-        names = [str(x) for x in z["names"]]
-        part = z["asset_part"].astype(np.int64)
-        counts = {n: int((part == i).sum()) for i, n in enumerate(names)}
-        return names, part, counts, jl(os.path.join(GEN, name, "parts3d_stats.json"))
+    <p class="note">형상 유지를 두 팔에 따로 주면 두 기준이 만나는 어깨 이음매가 늘어난다 (경계 간선 {bp:.0f}%).
+      형상 유지를 하나로 두고 부피 · 강성만 부위별로 하면 몸통 흔들림이 {pu['torso']:.2f} → {nn['torso']:.2f} cm, 경계 늘어남이 {bu:.1f} → {bn:.1f}% 로 줄었다.
+      팔은 아직 더 흔들리지 않는다: 좌우로 흔들면 힘이 옆으로 뻗은 팔의 길이 방향으로 들어가 팔이 휘지 않고, 보이는 움직임은 대부분 머리가 끄덕이는 것이다.
+      어느 부위를 단단 / 무르게 할지는 사람이 정했다.</p>"""
 
-    rnames, rpart, rcounts, rst = labels_and_stats("robot_sem")
-    bnames, bpart, bcounts, bst = labels_and_stats("bear_sem")
-    bfeat, rfeat = bst.get("vox_feat", {}), rst.get("vox_feat", {})
-    bvoxels = bfeat.get("decoder", {}).get("voxels", 0)
-    bbody = 100.0 * bcounts.get("body", 0) / max(len(bpart), 1)
+    rpart = np.load(os.path.join(GEN, "robot_sem", "parts3d.npz"))["asset_part"]
+    rst = jl(os.path.join(GEN, "robot_sem", "parts3d_stats.json"))
+    bst = jl(os.path.join(GEN, "bear_sem", "parts3d_stats.json"))
+    bfeat = bst.get("vox_feat", {})
+    bvoxels = bfeat.get("decoder", {}).get("voxels", 0) or bst.get("voxels", 0)
     return f"""
 <section id="semantic">
   <div class="wrap">
-    <p class="eyebrow">NEW · 생성 과정의 의미 정보 → 가우시안 부위 → 물리 편집</p>
-    <h2>가우시안마다 '어느 부위인지' 를 — 생성 모델 안에서 꺼내서</h2>
-    <p class="sub">원본 3DGS 의 가우시안은 자기가 머리인지 팔인지 모른다 — 색을 맞춘 결과일 뿐이다. TRELLIS 는 3D 복셀을 만들 때
-      <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>, <b>DiT 중간 특징</b>, 그리고 Gaussian decoder의 복셀 특징을 거친다.
-      입력 사진의 카메라를 추정해 보이는 곳은 2D 부위 이름을 고정하고, 가려진 곳은 부피를 따라 채운 뒤, decoder 특징은 <b>경계 보정에만</b>
-      사용했다. 결과: <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (PLY 속성으로 내보냄 · 로봇 {len(rpart):,}개 =
-      머리 {rcounts['head']:,} · 팔 {rcounts['arm']:,} · 몸통 {rcounts['torso']:,} · 다리 {rcounts['leg']:,}).</p>
+    <p class="eyebrow">NEW · 생성 모델 내부 신호 → 가우시안 부위 → 부위별 물성</p>
+    <h2>가우시안마다 '어느 부위인지' — 생성 모델 안에서 꺼내기</h2>
+    <p class="sub">기하 그래프는 가우시안이 머리인지 팔인지 모른다. TRELLIS 는 3D 를 만들 때 <b>입력 이미지의 어느 부분을 보는지(cross-attention)</b>를 거치는데,
+      이 신호로 사진의 2D 부위 이름을 3D 로 옮겼다. 사진에 보이는 쪽은 입력 카메라를 추정해 그대로 투영하고, 가려진 쪽은 부피를 따라 채운 뒤,
+      경계는 복셀 특징 유사도로 다듬었다. 그 결과 <b>모든 가우시안이 part_id 와 신뢰도를 가진다</b> (로봇 {len(rpart):,}개 전부 · PLY 속성으로 내보냄).</p>
     <ol class="pipe">
-      <li><span class="tag gen">2D</span><b>입력 이미지의 부위 이름</b><small>Grounding DINO + SAM</small></li>
-      <li><span class="tag mine">생성 중간</span><b>attention · DiT 신호</b><small>SLat 트랜스포머 · 토큰 → 이미지 패치</small></li>
-      <li><span class="tag mine">카메라</span><b>보이는 복셀만 2D 투영</b><small>attention + 실루엣으로 입력 시점 추정 · z-buffer</small></li>
-      <li><span class="tag mine">가려진 쪽</span><b>부피 기준</b><small>어느 부위의 속에 붙어 있나 · 얇은 연결은 비싸게</small></li>
-      <li><span class="tag mine">경계 보정</span><b>복셀 특징 유사도</b><small>보이는 seed 고정 · seed 대표 특징과의 유사도 투표 + 이웃 전파</small></li>
-      <li><span class="tag mine">결과</span><b>part_id → 부위별 물성</b><small>가우시안 i → 복셀 i//32 · XPBD (부위를 아는 솔버는 검증 중)</small></li>
+      <li><span class="tag gen">2D</span><b>사진의 부위 이름</b><small>Grounding DINO + SAM</small></li>
+      <li><span class="tag mine">보이는 쪽</span><b>2D 부위 투영</b><small>attention · 실루엣으로 입력 카메라 추정</small></li>
+      <li><span class="tag mine">가려진 쪽</span><b>부피 기준</b><small>어느 부위의 속에 붙어 있나</small></li>
+      <li><span class="tag mine">경계</span><b>복셀 특징 유사도</b><small>보이는 부위의 대표 특징과 비교</small></li>
+      <li><span class="tag mine">결과</span><b>part_id → 부위별 물성</b><small>가우시안 = 자기가 나온 복셀의 라벨</small></li>
     </ol>
     <div class="row2">
-      {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 — 최신 카메라 탐색 · 부피 기준 · decoder 특징 경계 보정 결과", True)}
-      {video("bear_sem_parts.mp4", "bear_sem_parts.jpg", "곰 인형 — 최신 4차 결과: 보이는 seed 고정 · 부피 기준 가려진 쪽 · decoder 특징 경계 보정", True)}
+      <figure class="media"><video src="assets/robot_sem_parts.mp4" poster="assets/robot_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>안내 로봇 — 왼쪽 원래 색 · 오른쪽 가우시안마다 붙은 부위</figcaption></figure>
+      <figure class="media"><video src="assets/bear_sem_parts.mp4" poster="assets/bear_sem_parts.jpg" controls muted loop playsinline autoplay preload="metadata"></video><figcaption>곰 인형 — 같은 방법 (아래 4차)</figcaption></figure>
     </div>
-
 {part_shake_html}
 
-    <h3>분류는 어떻게 다듬었나 — 곰 인형에서의 4단계 개선</h3>
-    <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (좌표 k-means 는 머리와 몸을 가로질러 자르고, 특징 k-means 는 무늬로 묶는다).
-      그래서 생성 모델이 입력 사진의 어디를 보는지(attention)에서 출발했고, 털 질감이 고른 곰 인형에서 부위가 섞이는 문제를 네 단계에 걸쳐 고쳤다.
-      각 줄은 같은 곰의 part_id 를 정면 · 옆 · 뒤 · 반대 옆에서 본 것.</p>
+    <h3>분류는 어떻게 다듬었나 — 곰 인형에서 4단계</h3>
+    <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (아래 기준선). 그래서 생성 모델이 사진의 어디를 보는지(attention)에서 출발했고,
+      털 질감이 고른 곰 인형에서 부위가 섞이는 문제를 네 단계로 고쳤다. 단계별 그림은 같은 곰을 정면 · 옆 · 뒤 · 반대 옆에서 본 것.</p>
     <figure class="media"><img src="assets/bear_sem_baselines.jpg" alt="기준선 — 이름 없이 묶기" loading="lazy">
-      <figcaption><b>기준선 · 이름 없이 특징이나 좌표만으로 묶기</b> — 위에서부터 DiT 특징 k-means · decoder 특징 k-means · 좌표 k-means.
-        특징으로 묶으면 무늬 · 재질대로, 좌표로 묶으면 위치대로 나뉘어 머리 · 팔 같은 부위가 되지 않는다 (색은 부위 이름이 아니라 묶음 번호).</figcaption></figure>
+      <figcaption><b>기준선 · 이름 없이 묶기</b> — 위에서부터 DiT 특징 · decoder 특징 · 좌표 k-means.
+        특징으로 묶으면 무늬대로, 좌표로 묶으면 위치대로 나뉘어 부위가 되지 않는다 (색 = 묶음 번호).</figcaption></figure>
     <figure class="media"><img src="assets/bear_parts_try1.jpg" alt="1차 — attention 투표 + DiT 특징 전파" loading="lazy">
       <figcaption><b>1차 · attention 투표 + DiT 특징 전파</b> — 오른팔 안쪽에 머리 라벨이 띠처럼 섞이고 다리에 머리 점이 생겼다.
-        cross-attention 은 대응점이 아니라 특징 검색이라 고른 털에서는 머리 · 다리 패치까지 본다. 같은 시선 위의 가려진 복셀도
-        앞 픽셀로 투표했고, 전파 반경(토큰 4칸 = 물체 크기의 1/8)이 팔과 몸통 사이 틈을 건너 잡음을 퍼뜨렸다.</figcaption></figure>
+        attention 은 대응점이 아니라 비슷한 특징을 찾는 것이라 고른 털에서는 엉뚱한 패치까지 보고, 가려진 복셀도 앞 픽셀로 투표했으며,
+        넓은 전파 반경이 팔과 몸통 사이 틈을 건넜다.</figcaption></figure>
     <figure class="media"><img src="assets/bear_parts_try2.jpg" alt="2차 — 입력 카메라 추정 + 보이는 복셀만 투영" loading="lazy">
-      <figcaption><b>2차 · 입력 카메라 추정 + 보이는 복셀만 2D 부위 투영</b> — 앞면은 깨끗해졌지만, 가려진 옆 · 뒤를 표면을 따라 번지는 전파로
-        채워서 라벨이 넓게 잡힌 팔이 몸통 옆과 허벅지까지 먹고 꼬리는 다리가 됐다 (사진에서 몸통은 배에만 라벨이 있었다).</figcaption></figure>
-    <figure class="media"><img src="assets/bear_sem_camera_fit.jpg" alt="2차에서 추가한 입력 카메라 추정" loading="lazy">
-      <figcaption>2차에서 추가한 입력 카메라 추정 — attention 무게중심으로 카메라를 맞추고 실루엣으로 다듬었다 (실루엣 일치 0.30 → 0.89).
-        왼쪽 2D 부위 (Grounding DINO + SAM) · 가운데 추정 카메라로 그린 '사진에 보이는 복셀' 의 3D 부위 · 오른쪽 실루엣 비교
-        (회색 = 일치 · 빨강 = 복셀만 · 파랑 = 사진만). 보이는 복셀만 그 픽셀의 부위를 받는다.</figcaption></figure>
+      <figcaption><b>2차 · 입력 카메라 추정 + 보이는 복셀만 투영</b> — 앞면은 깨끗해졌지만, 가려진 옆 · 뒤를 표면을 따라 번지는 전파로 채워
+        팔이 몸통 옆과 허벅지까지 먹고 꼬리는 다리가 됐다 (사진에서 몸통 라벨은 배뿐이었다).</figcaption></figure>
+    <figure class="media"><img src="assets/bear_sem_camera_fit.jpg" alt="2차의 입력 카메라 추정" loading="lazy">
+      <figcaption>2차의 입력 카메라 추정 — attention 으로 초기값을 잡고 실루엣으로 다듬었다 (실루엣 일치 0.30 → 0.89).
+        왼쪽 사진의 2D 부위 · 가운데 추정 카메라로 본 3D 부위 · 오른쪽 실루엣 비교 (회색 = 일치 · 빨강 = 복셀만 · 파랑 = 사진만).</figcaption></figure>
     <figure class="media"><img src="assets/bear_parts_try3.jpg" alt="3차 — 가려진 쪽은 부피 기준" loading="lazy">
-      <figcaption><b>3차 · 가려진 쪽은 '어느 부위의 속(부피)에 붙어 있나' 로</b> — 복셀 껍질을 속이 찬 부피로 채우고, 표면마다 깊이를 따라
-        닿는 부위의 속과 부피 안 거리(두꺼운 속은 싸고, 팔 · 몸통이 맞닿은 얇은 목은 비싸게)로 정했다. 등과 꼬리는 배와 같은
-        몸통 속에 닿으므로 몸통으로 돌아왔다. 뒷머리 · 목 뒤에는 팔 라벨이 아직 조금 섞인다.</figcaption></figure>
-    <figure class="media"><img src="assets/bear_sem_vox_feat_diff.jpg" alt="4차 복셀 특징 유사도로 바뀐 위치" loading="lazy">
-      <figcaption><b>4차 · 복셀 특징 유사도로 경계만 보정</b> — Gaussian decoder 의 마지막 출력 직전 768차원 복셀 특징을 64차원으로 줄여 두 가지로 썼다:
-        사진에서 이름을 받은 보이는 복셀들의 부위별 대표 특징과 얼마나 닮았는지 약하게 투표(20%)하고, 맞닿은 복셀끼리 전파한다.
-        보이는 2D seed 는 바꾸지 않고, 이름 없는 특징 묶기(clustering)는 하지 않는다.
-        곰에서는 {bfeat.get('voxels_changed', 0):,} / {bvoxels:,} voxel이 바뀌었고 (보이는 쪽 {bfeat.get('changed_visible', 0):,},
-        가려진 쪽 {bfeat.get('changed_hidden', 0):,}), 그림의 색 점만 달라진 위치다 — 뒷머리의 빨간 점은 3차에서 팔로 섞였던 곳이 머리로 돌아온 곳이다.</figcaption></figure>
+      <figcaption><b>3차 · 가려진 쪽은 '어느 부위의 속(부피)에 붙어 있나' 로</b> — 복셀 껍질을 속이 찬 부피로 채우고, 가려진 표면마다
+        부피 안에서 가장 가깝게 닿는 부위의 속을 따랐다 (두꺼운 속은 지나기 쉽고, 목처럼 얇은 연결은 어렵게).
+        등과 꼬리가 배와 같은 몸통으로 돌아왔다. 뒷머리 · 목 뒤에는 팔 라벨이 아직 조금 섞인다.</figcaption></figure>
+    <figure class="media"><img src="assets/bear_sem_vox_feat_diff.jpg" alt="4차 — 복셀 특징 유사도로 바뀐 위치" loading="lazy">
+      <figcaption><b>4차 · 복셀 특징 유사도로 경계 보정</b> — Gaussian decoder 의 복셀 특징(768 → 64차원)으로, 사진에서 이름을 받은 복셀들의
+        부위별 대표 특징과 닮은 정도를 약하게(20%) 투표하고 맞닿은 복셀끼리 전파했다. 사진에서 받은 라벨은 고정한다.
+        곰에서 {bfeat.get('voxels_changed', 0):,} / {bvoxels:,} 복셀이 바뀌었고 (그림에서 색이 칠해진 곳), 뒷머리의 빨간 줄은 3차에서 팔로 섞였던 곳이 머리로 돌아온 것이다.</figcaption></figure>
+    <p class="note">실제 곰에는 정답 라벨이 없어, 부위를 아는 <b>합성 곰</b>(구 · 타원체 · 캡슐로 만든 곰에 알려진 카메라로 2D 부위와
+      잡음 섞인 attention 을 만든 시험, tests/test_parts_core.py)으로 정확도를 쟀다.</p>
     <div class="table-wrap"><table class="metrics">
-      <tr><th rowspan="2">부위 분류 정확도<br><small>정답과 같은 부위로 분류된 복셀의 비율<br>높을수록 좋음 · 100% = 전부 맞음</small></th><th colspan="2">표면 위치별</th><th colspan="2">부위별</th></tr>
+      <tr><th rowspan="2">합성 곰 · 부위 분류 정확도<br><small>정답과 같은 부위로 분류된 복셀의 비율<br>높을수록 좋음</small></th><th colspan="2">표면 위치별</th><th colspan="2">부위별</th></tr>
       <tr><th>사진에 보이는 면</th><th>가려진 면 (옆 · 뒤)</th><th>팔</th><th>몸통</th></tr>
       <tr><td>1차 · attention + 특징 전파</td><td>85%</td><td>73%</td><td>91%</td><td>0%</td></tr>
       <tr><td>2차 · + 카메라 추정 · 보이는 복셀 투영</td><td><b>98%</b></td><td>77%</td><td>96%</td><td>25%</td></tr>
       <tr><td>3차 · + 가려진 쪽은 부피 기준</td><td><b>98%</b></td><td><b>85%</b></td><td><b>98%</b></td><td><b>48%</b></td></tr>
       <tr><td>4차 · + 특징 유사도 경계 보정</td><td><b>98%</b></td><td><b>87%</b></td><td><b>99%</b></td><td><b>52%</b></td></tr>
     </table></div>
-    <p class="note">실제 곰에는 정답 라벨이 없어 정확도를 잴 수 없다. 그래서 부위 정답을 아는 <b>합성 곰</b>(구 · 타원체 · 캡슐로 만든 곰 모양에
-      알려진 카메라로 2D 부위와 잡음 섞인 attention 을 만든 시험, 저장소 tests/test_parts_core.py)의 복셀 8,336개를 정답과 비교했다.
-      4차는 전체 정확도 88.57% → <b>90.26%</b>, 경계 정확도 76.25% → <b>79.95%</b>로 올랐다. 실제 곰에서는 몸통 비율이
-      11.6% → 15.0% → 25.2% → {bbody:.2f}%로, 3차에서 옆 · 뒤가 몸통으로 돌아온 효과가 유지됐다. 4차는 전체 비율을 크게 바꾸는 단계가 아니라
-      경계를 다듬는 단계다. 이 향상은 새 '대표 특징 투표' 단계 덕분이다 — 같은 단계를 기존 DiT 토큰 특징으로 돌려도 합성 곰에서 거의 같은 값
-      (전체 90.22%, 경계 79.89%)이 나왔고, 실제 곰에서도 뒷머리 줄이 똑같이 머리로 돌아왔다. 차이는 바뀐 양뿐이다: DiT 특징은 492개
-      (목 뒤 띠 포함), decoder 특징은 305개로 더 국소적으로 바꾼다. decoder 특징이 더 촘촘해서 더 정확하다는 근거는 아직 없다.</p>
+    <p class="note">몸통은 사진에서 배에만 라벨이 있어 가장 어렵다. 4차의 향상(전체 88.57 → 90.26%, 부위 경계 복셀 76.25 → 79.95%)은 대표 특징 투표에서 나온다 —
+      같은 단계를 DiT 특징으로 돌려도 거의 같았고(90.22%, 79.89%), 실제 곰의 뒷머리도 똑같이 머리로 돌아왔다.
+      decoder 특징은 바뀌는 범위가 더 좁을 뿐({bfeat.get('voxels_changed', 0):,} vs 492 복셀) 더 정확하다는 근거는 아직 없다.</p>
 
     <h3>최종 분류 결과 — 두 에셋, 네 방향</h3>
-    <p class="note">열: 정면 · 옆 · 뒤 · 반대 옆.
-      <b>곰과 안내 로봇 모두 4차 방법</b>의 결과다. 행: 원래 색 · attention 투표만 · 예전 1차 결과 · 2차의 투영 투표
-      (사진에 보이는 복셀만, 회색 = 모름) · 4차 최종. 로봇은 global search가 attention 초기화 실패를 피해서
-      실루엣 IoU {rst['camera']['silhouette_iou']:.3f}, visible colour correlation {rst['camera']['color_corr_visible']:.3f}로 카메라를 맞췄고,
-      attention fallback 없이 decoder 특징 보정을 적용했다. 단계별 개선(위 1~4차)은 곰에서 했고, 로봇에는 완성된 4차 방법을 그대로 적용했다 — 두 그림은 같은 행으로 그렸다.</p>
+    <p class="note">열: 정면 · 옆 · 뒤 · 반대 옆. 행: 원래 색 · attention 투표만 · 1차 · 2차의 투영 (사진에 보이는 복셀만, 회색 = 모름) · 4차 최종.
+      방법은 곰에서 다듬었고, 로봇에는 완성된 4차 방법을 그대로 적용했다 (추정 카메라의 실루엣 일치 {rst['camera']['silhouette_iou']:.2f}).</p>
     <div class="row2">
-      {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
-      {img("bear_sem_parts3d_grid.jpg", "곰 인형")}
+      <figure class="media"><img src="assets/robot_sem_parts3d_grid.jpg" alt="안내 로봇" loading="lazy"><figcaption>안내 로봇</figcaption></figure>
+      <figure class="media"><img src="assets/bear_sem_parts3d_grid.jpg" alt="곰 인형" loading="lazy"><figcaption>곰 인형</figcaption></figure>
     </div>
 
     <div class="callout warn">
-      <b>정직한 결과와 다음 단계</b>
+      <b>한계와 다음 단계</b>
       <ul>
-        <li>사진에 보이는 쪽은 2D 부위를 그대로 따르지만 가려진 쪽은 부피로 추정한 것이라, 곰 뒷머리처럼 조금 섞인다. 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
-        <li>로컬 런타임에 <b>부위를 아는 솔버</b>를 넣었다: 형상 유지를 (그래프 연결 성분, 부위)마다 따로 계산하고, 부피 클러스터는 부위 경계를 넘지 않게 만든다.
-          실제 곰 99,999개에서 형상 그룹 5개, 부위를 넘는 부피 클러스터 0개로 구조가 적용된 것을 확인했다. 위 흔들기 영상이 첫 비교다 — 몸통은 덜 흔들리지만,
-          팔만 덜렁이게 하는 것과 어깨 이음매는 아직이다. 재질 · 질량 · 감쇠를 부위 이름에서 자동으로 정하는 것도 다음 단계.</li>
+        <li><b>분류.</b> 사진에 보이는 쪽은 2D 부위를 따르지만 가려진 쪽은 부피로 추정한 것이라 곰 뒷머리처럼 조금 섞이고,
+          로봇 안테나처럼 가는 부위는 일부만 잡힌다. 2D 부위 문구는 물체마다 손으로 골랐다 (곰: 'paw' 가 발에 걸려 바꿈).</li>
+        <li><b>솔버.</b> 부위를 아는 XPBD(비공개 런타임에 추가)는 부피 클러스터와 형상 유지를 부위 단위로 나눈다 — 부위 기능을 끄면 기존 결과와 비트 단위로 같다.
+          몸통은 덜 흔들리게 됐지만 팔만 덜렁이게 하는 것과 어깨 이음매는 아직이다. 다음은 경계 띠에서 두 형상 목표를 섞는 것(lattice shape matching),
+          그리고 부위 이름에서 재질 · 질량 · 감쇠를 자동으로 정하는 것.</li>
       </ul>
     </div>
   </div>
@@ -371,6 +348,8 @@ def sem_section():
 
 def page(rows):
     gpu = rows[0]["g3"]["gpu"].replace("NVIDIA GeForce ", "") if rows else ""
+    counts = [r["g3"]["gaussians"] for r in rows] or [0]
+    gmin, gmax = min(counts) // 10000, max(counts) // 10000                # 생성된 가우시안 수 (만 단위)
     return f"""<!doctype html>
 <html lang="ko">
 <head>
@@ -386,7 +365,7 @@ def page(rows):
   <div class="wrap nav-in">
     <a class="brand" href="#top">Sangmin Kwon</a>
     <div class="links">
-      <a href="#genai">생성형 3D 데모</a><a href="#semantic">의미 → 물리</a><a href="#apg">APG-GS</a>
+      <a href="#genai">생성형 3D 데모</a><a href="#semantic">부위 → 물리</a><a href="#apg">APG-GS</a>
       <a href="#background">배경</a><a href="#next">다음 연구</a>
     </div>
   </div>
@@ -396,10 +375,7 @@ def page(rows):
   <div class="wrap">
     <figure class="media opener"><video src="assets/letters_drop.mp4" poster="assets/letters_drop.jpg" autoplay muted loop
       playsinline controls preload="auto"></video>
-      <figcaption>TRELLIS 로 생성한 글자 3D Gaussians 에 APG-GS 물리(CUDA XPBD)를 입혀 떨어뜨렸다 — 세우는 보정 없이 물리 그대로:
-        두께 3~9 cm 의 무른 글자 판이 착지하며 눌리고 튕기다 넘어진다.
-        마지막 구간에서는 바닥 높이를 짧게 올렸다 내려, 누운 글자들이 젤리처럼 출렁이며 튀어 오른다.
-        T 는 TRELLIS 예제 이미지, 나머지 글자는 SDXL-Turbo 로 같은 스타일을 만들어 생성 · 글자당 5만 개로 재최적화 · 연출은 TRELLIS 프로젝트 티저 영상을 따라 했다.</figcaption></figure>
+      <figcaption>TRELLIS 로 생성한 글자 3D Gaussians 에 APG-GS 물리(CUDA XPBD)를 입혀 떨어뜨렸다 (연출은 TRELLIS 티저를 참고).</figcaption></figure>
     <p class="eyebrow">Graphics · 3D Representation · Generative 3D</p>
     <h1>생성된 3D 를<br>편집하고 만질 수 있는 컨텐츠로</h1>
     <p class="lede">3D 표현(볼륨 → NeRF → 3D Gaussian Splatting)의 내부 구조를 다뤄 온 그래픽스 연구자입니다.
@@ -411,11 +387,12 @@ def page(rows):
     </div>
     <div class="cards3">
       <div class="card"><span class="k">01 · 생성 → 편집</span>
-        <p>텍스트 한 줄 → 이미지 → 3D Gaussians → 개수 조절(79만 → 10만, 화질 유지) → 구조 그래프 → 잡아당겨 편집.</p></div>
+        <p>텍스트 한 줄 → 이미지 → 3D Gaussians → 개수 조절(79만 → 10만, 화질 유지) → 구조 그래프 → 잡아당겨 편집.
+          생성 모델 안의 신호로 가우시안마다 부위도 붙인다.</p></div>
       <div class="card"><span class="k">02 · 표현의 깊이</span>
         <p>가우시안을 점이 아닌 비등방 타원체로 보고 Bhattacharyya 겹침으로 구조를 복원, 변형 때 공분산까지 Σ′ = FΣ₀Fᵀ 로 갱신.</p></div>
       <div class="card"><span class="k">03 · 끝까지 구현</span>
-        <p>CUDA XPBD 솔버(10만 가우시안 1프레임 5.7 ms), OpenGL 기반 3DGS 뷰어와 편집 결과 렌더링까지 구현.</p></div>
+        <p>CUDA XPBD 솔버(1프레임 5.7 ms · 175 FPS), OpenGL 기반 3DGS 뷰어와 편집 결과 렌더링까지 구현.</p></div>
     </div>
   </div>
 </header>
@@ -429,7 +406,7 @@ def page(rows):
       <tr><td>Graphics 이론</td><td>3DGS 공분산·투영, 변형 기울기 F 추정과 Σ′ = FΣ₀Fᵀ, Bhattacharyya 거리, 볼륨 렌더링(ray marching · transfer function) <a href="#apg">→ APG-GS</a></td></tr>
       <tr><td>실시간 3D 편집 도구</td><td>SIBR(OpenGL) 뷰어에 가우시안 그래프 구축·변형·공분산 갱신 기능을 구현하고, 생성 결과를 같은 편집 파이프라인으로 연결 <a href="#apg">→ APG-GS</a></td></tr>
       <tr><td>Graphics API</td><td>OpenGL(의료 볼륨 렌더링, SIBR 뷰어), CUDA 커널 설계·최적화(워프 단위 gather, atomic 없는 결정적 누적)</td></tr>
-      <tr><td>AR 컨텐츠 저작</td><td>찍거나 생성한 3D 를 편집·상호작용 가능한 에셋으로 만드는 전 과정(정리 → 정렬 → 구조 → 변형 → 엔진)을 한 명령으로</td></tr>
+      <tr><td>AR 컨텐츠 저작</td><td>생성한 3D 를 만질 수 있는 에셋으로: 생성 → 정리 · 정렬 → 구조 그래프 → 변형을 스크립트 하나로 잇고, 가우시안마다 부위를 붙여 부위별 물성에 사용 <a href="#semantic">→ 부위</a></td></tr>
     </table></div>
   </div>
 </section>
@@ -463,8 +440,8 @@ def page(rows):
 
     {asset_cards(rows)}
 
-    <h3 id="reduce">개수 조절 — 생성된 가우시안의 6~30% 로, 화질은 그대로</h3>
-    <p class="sub">TRELLIS 는 표면에 걸린 복셀마다 가우시안을 <b>고정 32개</b>씩 만들어 에셋당 30만~80만 개가 된다.
+    <h3 id="reduce">개수 조절 — 10만 개로 줄여도 화질은 그대로</h3>
+    <p class="sub">TRELLIS 는 표면에 걸린 복셀마다 가우시안을 <b>고정 32개</b>씩 만들어 에셋당 {gmin}만~{gmax}만 개가 된다.
       렌더링에는 괜찮지만 편집·물리에는 과하다. 중요도(불투명도 × 두 큰 축 곱) 상위 N 개만 남기면 구멍과 얼룩이 생기므로,
       원본을 무작위 시점에서 렌더한 이미지를 정답으로 남은 가우시안의 위치 · 크기 · 회전 · 불투명도 · 색을 다시 맞췄다 (Adam, L1, 3000회, 에셋당 약 13 s).</p>
     <div class="narrow">{img("distill_grid.jpg", "왼쪽 원본 · 가운데 5만 개 잘라내기만 · 오른쪽 5만 개 재최적화 (학습에 안 쓴 고정 시점)")}</div>
@@ -476,15 +453,15 @@ def page(rows):
     {metrics_table(rows)}
 
     <div class="callout warn">
-      <b>관찰과 한계 — 다음 연구로 이어지는 지점</b>
+      <b>관찰과 한계</b>
       <ul>
         <li><b>생성 출력은 렌더링용으로 과하다.</b> 복셀당 고정 32개라 개수가 물체 복잡도와 무관하다. 재최적화로 줄였지만
           이것은 생성 뒤의 후처리다 — 생성 단계에서 용도(렌더 / 편집 / 모바일 AR)에 맞는 개수·크기를 직접 내놓는 것이 다음 과제.</li>
         <li><b>Σ′ 갱신의 효과는 가우시안 크기와 늘어난 정도에 달려 있다.</b> 개수를 줄여 가우시안이 커지면 위치만 갱신한 렌더와
           Σ′ 까지 갱신한 렌더의 차이가 커진다 (위 표 마지막 두 열). 화분 잎처럼 크게 늘어난 곳에서는 위치만 갱신하면 가장자리가 찢긴다.</li>
         <li><b>이미지 한 장의 한계.</b> 입력에 없던 뒷면은 생성 모델이 추정한 것이라 흐리다 (로봇 뒷면).</li>
-        <li><b>구조는 생성 뒤에 붙였다.</b> 그래프는 기하(겹침)만 보고 만든다. 파트·재질을 아는 생성 모델이 구조까지 함께 내놓으면
-          잎·팔처럼 얇은 부분이 더 자연스럽게 움직일 것 — <a href="#next">다음 연구</a>.</li>
+        <li><b>그래프는 기하만 본다.</b> 겹침으로만 이어서 어느 가우시안이 팔인지 모르고, 물성도 온몸에 하나다
+          → <a href="#semantic">아래</a>에서 생성 모델 안의 신호로 부위를 붙였다.</li>
       </ul>
     </div>
   </div>
@@ -536,11 +513,11 @@ def page(rows):
 
 <section id="next">
   <div class="wrap">
-    <p class="eyebrow">현재 구현 · 다음 연구</p>
+    <p class="eyebrow">다음 연구</p>
     <h2>생성된 3D 가 바로 쓰이는 공간 컨텐츠가 되도록</h2>
     <div class="cards3">
-      <div class="card"><span class="k">생성 단서를 보존하는 표현</span><p><b>구현:</b> decoder 출력 직전의 복셀 특징을 부위 경계 보정에 보존하고, 정해진 part_id를 XPBD의 부피 제약과 형상 그룹에 전달했다 (솔버 쪽은 검증 중). 아직 생성 모델이 부위·재질 이름을 직접 예측하는 단계는 아니다.</p></div>
-      <div class="card"><span class="k">편집 가능한 생성 표현</span><p>생성 가우시안의 개수 · 크기를 용도(렌더 / 물리 / 모바일 AR)에 맞게 조절하는 표현과 LOD.</p></div>
+      <div class="card"><span class="k">부위 · 재질을 아는 생성</span><p>지금은 생성이 끝난 뒤 모델 안의 신호로 부위를 꺼낸다. 다음은 생성 단계에서 부위와 재질(물성)까지 함께 내놓아 바로 물리에 쓰이는 표현.</p></div>
+      <div class="card"><span class="k">용도에 맞는 생성 표현</span><p>생성 가우시안의 개수 · 크기를 용도(렌더 / 물리 / 모바일 AR)에 맞게 조절하는 표현과 LOD.</p></div>
       <div class="card"><span class="k">사용자가 조종하는 저작</span><p>텍스트 · 스케치 · 드래그로 공간 컨텐츠를 만들고 고치는 도구 — 실제 공간 스캔과 생성 에셋을 한 장면에서.</p></div>
     </div>
   </div>
