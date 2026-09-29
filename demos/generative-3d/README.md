@@ -17,7 +17,7 @@ Scripts, TRELLIS patches, and measured results behind the portfolio page. Instal
 | 2D parts | `seg2d.py` (Grounding DINO boxes → SAM masks), `dl_seg.py` | `parts2d.npz`, `parts2d.png`, `parts2d.json` |
 | 3D parts | `lift_parts.py` → `parts_core.py` | `parts3d.npz`, `parts3d_stats.json`, `camera_fit.png`, `parts3d_grid.png`; optional `--vox-feat dec --diff-png` also writes `parts3d_vox_feat_diff.png` |
 | Part outputs | `export_parts.py`, `part_graph.py`, `parts_video.py` | `<asset>_parts.ply/.json`, `<asset>_part_id.u8`, `<asset>_graph_parts.npz`, SIBR folders |
-| Part physics | public demos: `semantic_pose.py`, `semantic_shake.py`, `semantic_drop.py`; optional private-runtime driver: `part_physics.py` | `out/semantic_*/`; a deformed PLY or SIBR model folder on request |
+| Part physics | public demos: `semantic_pose.py`, `semantic_shake.py`, `semantic_drop.py`; optional private-runtime driver and comparison: `part_physics.py`, `part_shake.py` | `out/semantic_*/`; a deformed PLY or SIBR model folder on request |
 | Letter opener | `gen_letters.py`, `run_letters.sh`, `letters_drop.py` | `out/letters/letters_drop.mp4` |
 
 `run_asset.sh`, `run_variants.sh` and `run_letters.sh` chain the stages (Git Bash; set `PY` to your interpreter).
@@ -77,6 +77,14 @@ not reducing total or visible accuracy. The latest local runs changed 305 / 24,8
 and 252 / 20,498 robot voxels (6 visible, 246 hidden). Real assets have no 3D ground truth, so those counts are not an
 accuracy claim.
 
+The pass has two parts: propagation on the 26-neighbour voxel graph, and a weak (20%) vote for the named part whose
+visible seeds have the most similar mean feature. On the synthetic teddy (overall 88.57% → 90.26%, boundary 76.25% →
+79.95%) nearly all of the gain comes from the vote: the graph step alone gives 88.74% / 76.58%, and the same pass run
+on the existing DiT token features copied to their 2³ voxels gives 90.22% / 79.89%. So the synthetic test supports the
+new step, not a benefit of the decoder feature's finer resolution. `--vox-feat dit` runs that comparison on a real
+asset. On the real bear, the changed voxels include the back-of-head streak that the 3rd method still labeled arm; they
+now read head.
+
 **Why the teddy bear's arm mixed** under the attention-only version:
 
 1. Cross-attention retrieves features rather than finding correspondences. On uniform fur, arm tokens also look at
@@ -129,6 +137,15 @@ colour correlation 0.438, with no attention fallback. On the synthetic bear the 
   matching is split by `(graph component, part)`. Unresolved IDs use neighbouring labels where possible; remaining
   ones are explicitly reported as fallback groups. `--part-stiffness head=0.8,arm=0.2` sets only per-part shape-match
   strength. `--out-ply` and `--out-model` write a static result for SIBR; they do not add an interactive per-part UI.
+  Because the whole robot is one graph component, `(graph component, part)` puts both arms into one rigid fit.
+- **Part-aware shake comparison, private runtime** (`part_shake.py`). The same shake as `semantic_shake.py`, but both
+  robots are one soft body fixed only at the feet. The right one passes *part pieces* (same-part connected pieces, so
+  the left and right arm are separate; pieces under 200 Gaussians join their neighbour) to `set_part_ids`, gives the
+  soft pieces weaker shape matching (0.05 vs 0.15) and blends edge stiffness from body (0.6) to arm (0.2) over six
+  graph hops at the boundary. It records per-part wobble, per-piece shape error, boundary edge stretch and step time;
+  `--no-part-shape`, `--no-part-volume` and `--no-edge-ramp` switch the parts off one at a time.
+  `tests/runtime_regression.py` checks that the part-aware DLL matches the previous DLL bit for bit when no part IDs
+  are set.
 - **Export** (`export_parts.py`). `part_id` as a PLY property, raw bytes and JSON, plus SIBR model folders coloured by
   part or with chosen parts hidden. The SIBR viewer has no per-part toggles or per-part physics UI yet.
 

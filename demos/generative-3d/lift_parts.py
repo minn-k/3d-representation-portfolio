@@ -74,8 +74,9 @@ def main():
     ap.add_argument("--gate-color", type=float, default=0.2, help="보이는 복셀 색 · 사진 색 상관이 이보다 낮으면 attn 모드로")
     ap.add_argument("--no-cleanup", action="store_true", help="작은 조각 정리를 끈다")
     ap.add_argument("--vox-refine", type=float, default=0.5, help="보이는 복셀에 자기 투영 라벨을 섞는 비율 (0 = 끔)")
-    ap.add_argument("--vox-feat", default="none", choices=["none", "dec"],
-                    help="none = 기존 방법 · dec = 저장한 Gaussian decoder 복셀 특징으로 경계만 다듬기")
+    ap.add_argument("--vox-feat", default="none", choices=["none", "dec", "dit"],
+                    help="none = 기존 방법 · dec = 저장한 Gaussian decoder 복셀 특징으로 경계만 다듬기 · "
+                         "dit = 같은 단계를 DiT 토큰 특징(토큰의 2³ 복셀에 복사)으로 — decoder 특징의 기여를 가르는 비교용")
     ap.add_argument("--vox-feat-alpha", type=float, default=0.5, help="decoder 복셀 특징 전파 세기")
     ap.add_argument("--vox-feat-iters", type=int, default=30, help="decoder 복셀 특징 전파 횟수")
     ap.add_argument("--vox-feat-tau", type=float, default=0.1, help="decoder 복셀 특징 cosine 온도")
@@ -104,7 +105,12 @@ def main():
     blocks = dict(attn_blocks=[int(b) for b in args.attn_blocks.split(",")],
                   feat_blocks=[int(b) for b in args.feat_blocks.split(",")], knn=args.knn, alpha=args.alpha)
     vox_feat, dec_raw, dec_meta = None, None, None
-    if args.vox_feat == "dec":
+    if args.vox_feat != "none" and args.mode != "proj":
+        ap.error("--vox-feat 는 카메라 · 가시성 투영을 쓰는 --mode proj 에서만 쓸 수 있습니다")
+    if args.vox_feat == "dit":
+        feat_blocks = [int(b) for b in args.feat_blocks.split(",")]
+        vox_feat = pc.voxel_features(pc.dit_features(sem, feat_blocks)[pc.vox_to_tok(sem)], pca_dim=args.vox_feat_pca)
+    elif args.vox_feat == "dec":
         if args.mode != "proj":
             ap.error("--vox-feat dec 는 카메라 · 가시성 투영을 쓰는 --mode proj 에서만 쓸 수 있습니다")
         dec_path = os.path.join(out, "dec_feat.npz")
@@ -199,7 +205,7 @@ def main():
     if "vox_proj_label" in res:
         rows += [("투영 투표 (입력 사진에 보이는 복셀만, 회색 = 모름)", pc.part_colors(res["vox_proj_label"])[g2v]),
                  ("최종: 투영 + 고정 전파 + 부피 기준 가려진 쪽"
-                  + (" + decoder 복셀 특징" if vox_feat is not None else "") + " + 조각 정리",
+                  + ({"dec": " + decoder 복셀 특징", "dit": " + DiT 특징 (복셀로 복사)"}.get(args.vox_feat, "")) + " + 조각 정리",
                   pc.part_colors(res["vox_part"])[g2v])]
     if args.baselines:
         tc = sem["tok_coords"].astype(np.float32)
@@ -231,7 +237,7 @@ def main():
         cc = np.full_like(col, 0.72)
         cc[changed[g2v]] = pc.part_colors(res["vox_part"])[g2v][changed[g2v]]
         im = Image.fromarray(np.concatenate([render(cm, P, q, S, op, cc) for cm in cams], 1))
-        ImageDraw.Draw(im).text((6, 4), "decoder 복셀 특징으로 바뀐 복셀 (회색 = 그대로)",
+        ImageDraw.Draw(im).text((6, 4), f"{'decoder' if args.vox_feat == 'dec' else 'DiT'} 특징 유사도로 바뀐 복셀 (회색 = 그대로)",
                                 fill=(20, 20, 20), font=font)
         im.save(os.path.join(out, "parts3d_vox_feat_diff.png"))
 

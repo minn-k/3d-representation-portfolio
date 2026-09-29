@@ -242,8 +242,8 @@ def sem_section():
       <li><span class="tag mine">생성 중간</span><b>attention · DiT 신호</b><small>SLat 트랜스포머 · 토큰 → 이미지 패치</small></li>
       <li><span class="tag mine">카메라</span><b>보이는 복셀만 2D 투영</b><small>attention + 실루엣으로 입력 시점 추정 · z-buffer</small></li>
       <li><span class="tag mine">가려진 쪽</span><b>부피 기준</b><small>어느 부위의 속에 붙어 있나 · 얇은 연결은 비싸게</small></li>
-      <li><span class="tag mine">경계 보정</span><b>decoder 복셀 특징</b><small>visible seed는 고정 · 26-이웃 graph에서만 보정</small></li>
-      <li><span class="tag mine">결과</span><b>part_id → 제약 topology</b><small>가우시안 i → 복셀 i//32 · part-bounded XPBD</small></li>
+      <li><span class="tag mine">경계 보정</span><b>복셀 특징 유사도</b><small>보이는 seed 고정 · seed 대표 특징과의 유사도 투표 + 이웃 전파</small></li>
+      <li><span class="tag mine">결과</span><b>part_id → 부위별 물성</b><small>가우시안 i → 복셀 i//32 · XPBD (부위를 아는 솔버는 검증 중)</small></li>
     </ol>
     <div class="row2">
       {video("robot_sem_parts.mp4", "robot_sem_parts.jpg", "안내 로봇 — 최신 카메라 탐색 · 부피 기준 · decoder 특징 경계 보정 결과", True)}
@@ -263,7 +263,7 @@ def sem_section():
     <p class="note">목표는 머리 · 몸통은 0 (단단), 팔만 출렁임 — 의미 부위 쪽이 그대로 나왔고, 기존 그래프는 온몸이 같이 출렁인다.
       물성 — 기존 그래프: 온몸 간선 강성 {sh['uniform_stiff']} · 물체 형상 유지 {sh['uniform_shape']} (다리만 받침에 고정).
       의미 부위: part_id 가 팔이 아닌 가우시안(몸통 · 머리 · 다리)은 강체로 받침과 함께 움직이고, 팔 가우시안만 간선 강성 {sh['soft_stiff']} ·
-      형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계.</p>
+      형상 유지 {sh['semantic_shape']} 의 XPBD 연체. 어느 부위를 단단 / 무름으로 할지는 사람이 정했다 — 부위 이름에서 재질을 자동으로 정하는 것은 다음 단계. 이 영상은 로봇의 이전(1차) part_id 로 만든 것이다.</p>
 
     <h3>분류는 어떻게 다듬었나 — 곰 인형에서의 4단계 개선</h3>
     <p class="sub">좌표나 특징만으로 묶으면 이름 있는 부위가 나오지 않는다 (좌표 k-means 는 머리와 몸을 가로질러 자르고, 특징 k-means 는 무늬로 묶는다).
@@ -284,31 +284,33 @@ def sem_section():
       <figcaption><b>3차 · 가려진 쪽은 '어느 부위의 속(부피)에 붙어 있나' 로</b> — 복셀 껍질을 속이 찬 부피로 채우고, 표면마다 깊이를 따라
         닿는 부위의 속과 부피 안 거리(두꺼운 속은 싸고, 팔 · 몸통이 맞닿은 얇은 목은 비싸게)로 정했다. 등과 꼬리는 배와 같은
         몸통 속에 닿으므로 몸통으로 돌아왔다. 뒷머리 · 목 뒤에는 팔 라벨이 아직 조금 섞인다.</figcaption></figure>
-    <figure class="media"><img src="assets/bear_sem_vox_feat_diff.jpg" alt="4차 decoder 복셀 특징으로 바뀐 위치" loading="lazy">
-      <figcaption><b>4차 · decoder 복셀 특징으로 경계만 보정</b> — Gaussian decoder의 마지막 출력 직전 768차원 voxel feature를
-        64차원으로 줄여 26-이웃 graph에서만 썼다. 보이는 2D seed는 바꾸지 않고, 이름 없는 feature clustering도 하지 않는다.
+    <figure class="media"><img src="assets/bear_sem_vox_feat_diff.jpg" alt="4차 복셀 특징 유사도로 바뀐 위치" loading="lazy">
+      <figcaption><b>4차 · 복셀 특징 유사도로 경계만 보정</b> — Gaussian decoder 의 마지막 출력 직전 768차원 복셀 특징을 64차원으로 줄여 두 가지로 썼다:
+        사진에서 이름을 받은 보이는 복셀들의 부위별 대표 특징과 얼마나 닮았는지 약하게 투표(20%)하고, 맞닿은 복셀끼리 전파한다.
+        보이는 2D seed 는 바꾸지 않고, 이름 없는 특징 묶기(clustering)는 하지 않는다.
         곰에서는 {bfeat.get('voxels_changed', 0):,} / {bvoxels:,} voxel이 바뀌었고 (보이는 쪽 {bfeat.get('changed_visible', 0):,},
-        가려진 쪽 {bfeat.get('changed_hidden', 0):,}), 그림의 색 점만 달라진 위치다.</figcaption></figure>
+        가려진 쪽 {bfeat.get('changed_hidden', 0):,}), 그림의 색 점만 달라진 위치다 — 뒷머리의 빨간 점은 3차에서 팔로 섞였던 곳이 머리로 돌아온 곳이다.</figcaption></figure>
     <div class="table-wrap"><table class="metrics">
       <tr><th rowspan="2">부위 분류 정확도<br><small>정답과 같은 부위로 분류된 복셀의 비율<br>높을수록 좋음 · 100% = 전부 맞음</small></th><th colspan="2">표면 위치별</th><th colspan="2">부위별</th></tr>
       <tr><th>사진에 보이는 면</th><th>가려진 면 (옆 · 뒤)</th><th>팔</th><th>몸통</th></tr>
       <tr><td>1차 · attention + 특징 전파</td><td>85%</td><td>73%</td><td>91%</td><td>0%</td></tr>
       <tr><td>2차 · + 카메라 추정 · 보이는 복셀 투영</td><td><b>98%</b></td><td>77%</td><td>96%</td><td>25%</td></tr>
       <tr><td>3차 · + 가려진 쪽은 부피 기준</td><td><b>98%</b></td><td><b>85%</b></td><td><b>98%</b></td><td><b>48%</b></td></tr>
-      <tr><td>4차 · + decoder 특징 경계 보정</td><td><b>98%</b></td><td><b>87%</b></td><td><b>99%</b></td><td><b>52%</b></td></tr>
+      <tr><td>4차 · + 특징 유사도 경계 보정</td><td><b>98%</b></td><td><b>87%</b></td><td><b>99%</b></td><td><b>52%</b></td></tr>
     </table></div>
     <p class="note">실제 곰에는 정답 라벨이 없어 정확도를 잴 수 없다. 그래서 부위 정답을 아는 <b>합성 곰</b>(구 · 타원체 · 캡슐로 만든 곰 모양에
       알려진 카메라로 2D 부위와 잡음 섞인 attention 을 만든 시험, 저장소 tests/test_parts_core.py)의 복셀 8,336개를 정답과 비교했다.
       4차는 전체 정확도 88.57% → <b>90.26%</b>, 경계 정확도 76.25% → <b>79.95%</b>로 올랐다. 실제 곰에서는 몸통 비율이
       11.6% → 15.0% → 25.2% → {bbody:.2f}%로, 3차에서 옆 · 뒤가 몸통으로 돌아온 효과가 유지됐다. 4차는 전체 비율을 크게 바꾸는 단계가 아니라
-      경계를 다듬는 단계다.</p>
+      경계를 다듬는 단계다. 단, 합성 시험의 향상은 대부분 새 '대표 특징 투표' 단계에서 나온다 — 같은 단계를 기존 DiT 토큰 특징으로 돌려도
+      합성 곰에서 거의 같은 값(전체 90.22%, 경계 79.89%)이 나와, decoder 특징이 더 촘촘해서 좋아졌다고는 아직 말할 수 없다.</p>
 
     <h3>최종 분류 결과 — 두 에셋, 네 방향</h3>
     <p class="note">열: 정면 · 옆 · 뒤 · 반대 옆.
       <b>곰과 안내 로봇 모두 4차 방법</b>의 결과다. 행: 원래 색 · attention 투표만 · 예전 1차 결과 · 2차의 투영 투표
       (사진에 보이는 복셀만, 회색 = 모름) · 4차 최종. 로봇은 global search가 attention 초기화 실패를 피해서
       실루엣 IoU {rst['camera']['silhouette_iou']:.3f}, visible colour correlation {rst['camera']['color_corr_visible']:.3f}로 카메라를 맞췄고,
-      attention fallback 없이 decoder 특징 보정을 적용했다. 기준선 행은 부위 이름이 없는 k-means라 실제 part_id 대안이 아니다.</p>
+      attention fallback 없이 decoder 특징 보정을 적용했다. 곰 그림 아래 세 줄은 기준선(DiT 특징 · decoder 특징 · 좌표 k-means)이다 — 부위 이름이 없고, 특징 k-means 는 무늬대로 묶여 part_id 대안이 되지 못한다.</p>
     <div class="row2">
       {img("robot_sem_parts3d_grid.jpg", "안내 로봇")}
       {img("bear_sem_parts3d_grid.jpg", "곰 인형")}
@@ -318,9 +320,9 @@ def sem_section():
       <b>정직한 결과와 다음 단계</b>
       <ul>
         <li>사진에 보이는 쪽은 2D 부위를 그대로 따르지만 가려진 쪽은 부피로 추정한 것이라, 곰 뒷머리처럼 조금 섞인다. 2D 부위 문구는 물체마다 손으로 골랐고 (곰: 'paw' 가 발에 걸려 바꿈), 안테나처럼 가는 부위는 놓친다.</li>
-        <li>현재 로컬 runtime에는 `(graph component, part)`별 shape matching과 part 경계를 넘지 않는 volume cluster가 있다.
-          실제 곰 99,999개에서 5개 part shape group, cross-label volume cluster 0개를 확인했다. 다만 재질 · mass · damping을
-          part 이름에서 자동으로 정하거나, simulation 품질·속도를 정량 비교하는 일은 다음 단계다.</li>
+        <li>로컬 런타임에 <b>부위를 아는 솔버</b>를 넣었다: 형상 유지를 (그래프 연결 성분, 부위)마다 따로 계산하고, 부피 클러스터는 부위 경계를 넘지 않게 만든다.
+          실제 곰 99,999개에서 형상 그룹 5개, 부위를 넘는 부피 클러스터 0개로 구조가 적용된 것을 확인했다. 흔들기 · 당기기에서 위 영상과 같은 조건으로
+          비교한 영상과 수치는 아직이다. 재질 · 질량 · 감쇠를 부위 이름에서 자동으로 정하는 것도 다음 단계.</li>
       </ul>
     </div>
   </div>
@@ -498,7 +500,7 @@ def page(rows):
     <p class="eyebrow">현재 구현 · 다음 연구</p>
     <h2>생성된 3D 가 바로 쓰이는 공간 컨텐츠가 되도록</h2>
     <div class="cards3">
-      <div class="card"><span class="k">생성 단서를 보존하는 표현</span><p><b>구현:</b> decoder 출력 직전의 복셀 특징을 부위 경계 보정에 보존하고, 정해진 part_id를 XPBD의 부피 제약과 형상 그룹에 전달했다. 아직 생성 모델이 부위·재질 이름을 직접 예측하는 단계는 아니다.</p></div>
+      <div class="card"><span class="k">생성 단서를 보존하는 표현</span><p><b>구현:</b> decoder 출력 직전의 복셀 특징을 부위 경계 보정에 보존하고, 정해진 part_id를 XPBD의 부피 제약과 형상 그룹에 전달했다 (솔버 쪽은 검증 중). 아직 생성 모델이 부위·재질 이름을 직접 예측하는 단계는 아니다.</p></div>
       <div class="card"><span class="k">편집 가능한 생성 표현</span><p>생성 가우시안의 개수 · 크기를 용도(렌더 / 물리 / 모바일 AR)에 맞게 조절하는 표현과 LOD.</p></div>
       <div class="card"><span class="k">사용자가 조종하는 저작</span><p>텍스트 · 스케치 · 드래그로 공간 컨텐츠를 만들고 고치는 도구 — 실제 공간 스캔과 생성 에셋을 한 장면에서.</p></div>
     </div>
